@@ -1,3 +1,12 @@
+# Reminders lang:
+- always pull before developing
+- commit small, split commits based on purpose
+- use conventional commits
+
+Link to conventional commits:
+https://www.conventionalcommits.org/en/v1.0.0/
+
+
 # Welcome to your Expo app 👋
 
 This is an [Expo](https://expo.dev) project created with [`create-expo-app`](https://www.npmjs.com/package/create-expo-app).
