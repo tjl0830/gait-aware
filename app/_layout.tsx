@@ -10,7 +10,7 @@ export default function Layout() {
           headerShown: true,
           headerTitle: () => (
             <Image
-              source={require('../assets/images/gaitaware_logo.jpg')}
+              source={require('../assets/images/gaitaware_header_text.png')}
               style={{ width: 140, height: 36, resizeMode: 'contain' }}
             />
           ),
