@@ -11,11 +11,12 @@ export default function Layout() {
           headerTitle: () => (
             <Image
               source={require('../assets/images/gaitaware_header_text.png')}
-              style={{ width: 140, height: 36, resizeMode: 'contain' }}
+              style={{ width: 140, height: 36 }}
+              resizeMode="contain"
             />
           ),
           headerTitleAlign: 'center',
-          headerStyle: { backgroundColor: '#fff', height: 88 },
+          headerStyle: { backgroundColor: '#fff' },
         }} 
       />
     </Stack>
