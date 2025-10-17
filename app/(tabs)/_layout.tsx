@@ -18,6 +18,7 @@ export default function TabLayout() {
       <Tabs.Screen
         name="index"
         options={{
+          headerShown: false,
           title: 'Record',
           tabBarIcon: ({ color }) => <FontAwesome size={28} name="home" color={color} />,
         }}
@@ -25,6 +26,7 @@ export default function TabLayout() {
       <Tabs.Screen
         name="glossary"
         options={{
+          headerShown: false,
           title: 'Glossary',
           tabBarIcon: ({ color }) => <FontAwesome size={28} name="book" color={color} />,
         }}
@@ -32,6 +34,7 @@ export default function TabLayout() {
       <Tabs.Screen
         name="history"
         options={{
+          headerShown: false,
           title: 'History',
           tabBarIcon: ({ color }) => <FontAwesome size={28} name="history" color={color} />,
         }}
