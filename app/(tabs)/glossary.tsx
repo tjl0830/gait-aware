@@ -1,19 +1,19 @@
-import React, { useEffect, useState } from 'react';
+import React, { useState } from 'react';
 import {
-  LayoutAnimation,
-  Platform,
+  Animated,
   ScrollView,
   StyleSheet,
   Text,
   TouchableOpacity,
-  UIManager,
   View,
 } from 'react-native';
 
+// Update the type definition
 type GaitType = {
     id: string;
     title: string;
     description: string;
+    conditions: string[]; // Add this field
 };
 
 const GAIT_TYPES: GaitType[] = [
@@ -21,36 +21,63 @@ const GAIT_TYPES: GaitType[] = [
         id: 'antalgic',
         title: 'Antalgic gait',
         description: 'A gait adopted to avoid pain on weight bearing structures, typically characterised by a shortened stance phase on the affected side.',
+        conditions: [
+            'Hip arthritis',
+            'Knee osteoarthritis',
+            'Ankle sprains',
+            'Foot injuries',
+            'Lower extremity fractures'
+        ]
     },
     {
         id: 'ataxic',
         title: 'Ataxic gait',
         description: 'Unsteady, staggering gait with wide base of support often caused by cerebellar or sensory dysfunction.',
+        conditions: [
+            'Multiple sclerosis',
+            'Cerebellar stroke',
+            'Brain tumors',
+            'Alcoholic cerebellar degeneration',
+            'Vitamin B12 deficiency'
+        ]
     },
     {
         id: 'trendelenburg',
         title: 'Trendelenburg gait',
         description: 'Drop of the pelvis on the contralateral side during single limb stance due to weak hip abductors (gluteus medius/minimus).',
+        conditions: [
+            'Hip dysplasia',
+            'Post hip surgery',
+            'Polio',
+            'Superior gluteal nerve injury',
+            'Muscular dystrophy'
+        ]
     },
     {
         id: 'shuffling',
         title: 'Shuffling gait',
         description: 'Small, shuffling steps often seen in Parkinsonian syndromes with reduced arm swing and stooped posture.',
+        conditions: [
+            'Parkinson\'s disease',
+            'Multiple system atrophy',
+            'Normal pressure hydrocephalus',
+            'Progressive supranuclear palsy',
+            'Drug-induced parkinsonism'
+        ]
     },
-    // add more as needed
 ];
 
 export default function Tab() {
     const [expanded, setExpanded] = useState<Record<string, boolean>>({});
-
-    useEffect(() => {
-        if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
-            UIManager.setLayoutAnimationEnabledExperimental(true);
-        }
-    }, []);
+    const [animation] = useState(() => new Animated.Value(0));
 
     const toggle = (id: string) => {
-        LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+        Animated.timing(animation, {
+            toValue: expanded[id] ? 0 : 1,
+            duration: 300,
+            useNativeDriver: true,
+        }).start();
+        
         setExpanded(prev => ({ ...prev, [id]: !prev[id] }));
     };
 
@@ -61,7 +88,20 @@ export default function Tab() {
                 {GAIT_TYPES.map(item => {
                     const isOpen = !!expanded[item.id];
                     return (
-                        <View key={item.id} style={styles.item}>
+                        <Animated.View 
+                            key={item.id} 
+                            style={[
+                                styles.item,
+                                {
+                                    transform: [{
+                                        scale: animation.interpolate({
+                                            inputRange: [0, 1],
+                                            outputRange: [1, 1.01] // Changed from 1.02 to 1.01 for subtler effect
+                                        })
+                                    }]
+                                }
+                            ]}
+                        >
                             <TouchableOpacity
                                 activeOpacity={0.7}
                                 onPress={() => toggle(item.id)}
@@ -74,9 +114,13 @@ export default function Tab() {
                             {isOpen && (
                                 <View style={styles.content}>
                                     <Text style={styles.desc}>{item.description}</Text>
+                                    <Text style={styles.subheading}>Common underlying conditions:</Text>
+                                    {item.conditions.map((condition, index) => (
+                                        <Text key={index} style={styles.condition}>• {condition}</Text>
+                                    ))}
                                 </View>
                             )}
-                        </View>
+                        </Animated.View>
                     );
                 })}
             </ScrollView>
@@ -87,48 +131,68 @@ export default function Tab() {
 const styles = StyleSheet.create({
     container: {
         flex: 1,
-        paddingTop: 16,
+        paddingTop: 24, // Increased padding
         backgroundColor: '#fff',
     },
     heading: {
-        fontSize: 22,
-        fontWeight: '600',
+        fontSize: 28, // Larger heading
+        fontWeight: '700',
         textAlign: 'center',
-        marginBottom: 8,
+        marginBottom: 16,
+        color: '#000', // Ensuring maximum contrast
     },
     list: {
-        paddingHorizontal: 16,
+        paddingHorizontal: 20, // More padding
     },
     item: {
-        marginBottom: 12,
-        borderRadius: 8,
-        borderWidth: 1,
-        borderColor: '#e0e0e0',
+        marginBottom: 16, // More space between items
+        borderRadius: 12, // Slightly larger radius
+        borderWidth: 1.5, 
+        borderColor: '#d0d0d0',
         overflow: 'hidden',
-        backgroundColor: '#fafafa',
+        backgroundColor: '#ffffff', // Pure white background
     },
     header: {
         flexDirection: 'row',
         justifyContent: 'space-between',
         alignItems: 'center',
-        paddingVertical: 12,
-        paddingHorizontal: 12,
+        paddingVertical: 16, // More padding
+        paddingHorizontal: 16,
+        backgroundColor: '#f8f8f8', // Slight contrast for header
     },
     title: {
-        fontSize: 16,
-        fontWeight: '500',
+        fontSize: 20, // Larger title
+        fontWeight: '600',
+        color: '#000', // Maximum contrast
+        flex: 1,
+        paddingRight: 8,
     },
     chev: {
-        fontSize: 18,
+        fontSize: 24, // Larger chevron
         fontWeight: '600',
+        color: '#000',
     },
     content: {
-        paddingHorizontal: 12,
-        paddingBottom: 12,
+        paddingHorizontal: 16,
+        paddingVertical: 16, // Added vertical padding
     },
     desc: {
-        fontSize: 14,
-        color: '#333',
-        lineHeight: 20,
+        fontSize: 18, // Larger description text
+        color: '#000',
+        lineHeight: 26, // Increased line height
+    },
+    subheading: {
+        fontSize: 19, // Larger subheading
+        fontWeight: '600',
+        marginTop: 16,
+        marginBottom: 8,
+        color: '#000',
+    },
+    condition: {
+        fontSize: 18, // Larger condition text
+        color: '#000',
+        lineHeight: 26,
+        marginLeft: 12,
+        marginBottom: 4, // Space between conditions
     },
 });
