@@ -1,11 +1,11 @@
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
-  Animated,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View,
+    Animated,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    View,
 } from 'react-native';
 
 // Update the type definition
@@ -69,16 +69,58 @@ const GAIT_TYPES: GaitType[] = [
 
 export default function Tab() {
     const [expanded, setExpanded] = useState<Record<string, boolean>>({});
-    const [animation] = useState(() => new Animated.Value(0));
+    // per-item animated values so only the selected glossary item animates
+    const animsRef = useRef<Record<string, Animated.Value>>({});
+
+    useEffect(() => {
+        // create an Animated.Value for each gait type on mount
+        GAIT_TYPES.forEach(item => {
+            if (!animsRef.current[item.id]) {
+                animsRef.current[item.id] = new Animated.Value(0);
+            }
+        });
+    }, []);
 
     const toggle = (id: string) => {
-        Animated.timing(animation, {
-            toValue: expanded[id] ? 0 : 1,
-            duration: 300,
-            useNativeDriver: true,
-        }).start();
-        
-        setExpanded(prev => ({ ...prev, [id]: !prev[id] }));
+        const isOpen = !!expanded[id];
+        const toValue = isOpen ? 0 : 1;
+
+        // ensure Animated.Value exists for all items
+        GAIT_TYPES.forEach(item => {
+            if (!animsRef.current[item.id]) {
+                animsRef.current[item.id] = new Animated.Value(0);
+            }
+        });
+
+        if (toValue === 1) {
+            // opening: animate the selected item to 1, close others to 0
+            const animations = GAIT_TYPES.map(item => {
+                const anim = animsRef.current[item.id];
+                return Animated.timing(anim, {
+                    toValue: item.id === id ? 1 : 0,
+                    duration: item.id === id ? 300 : 200,
+                    useNativeDriver: true,
+                });
+            });
+            Animated.parallel(animations).start();
+        } else {
+            // closing: only animate the selected item to 0
+            const anim = animsRef.current[id];
+            Animated.timing(anim, {
+                toValue: 0,
+                duration: 250,
+                useNativeDriver: true,
+            }).start();
+        }
+
+        // keep expanded state; when opening, ensure others are false so only one is selected
+        setExpanded(prev => {
+            const next = { ...prev, [id]: !prev[id] };
+            if (!prev[id]) { // we are opening id -> collapse others
+                Object.keys(next).forEach(k => { if (k !== id) next[k] = false; });
+            }
+            return next;
+        });
     };
 
     return (
@@ -87,16 +129,18 @@ export default function Tab() {
             <ScrollView style={styles.list} contentContainerStyle={{ paddingBottom: 24 }}>
                 {GAIT_TYPES.map(item => {
                     const isOpen = !!expanded[item.id];
+                    // use the per-item Animated.Value (fallback to a new value if not present)
+                    const anim = animsRef.current[item.id] ?? (animsRef.current[item.id] = new Animated.Value(0));
                     return (
-                        <Animated.View 
-                            key={item.id} 
+                        <Animated.View
+                            key={item.id}
                             style={[
                                 styles.item,
                                 {
                                     transform: [{
-                                        scale: animation.interpolate({
+                                        scale: anim.interpolate({
                                             inputRange: [0, 1],
-                                            outputRange: [1, 1.01] // Changed from 1.02 to 1.01 for subtler effect
+                                            outputRange: [1, 1.01], // subtle scale for the selected item
                                         })
                                     }]
                                 }
@@ -113,11 +157,26 @@ export default function Tab() {
 
                             {isOpen && (
                                 <View style={styles.content}>
-                                    <Text style={styles.desc}>{item.description}</Text>
-                                    <Text style={styles.subheading}>Common underlying conditions:</Text>
-                                    {item.conditions.map((condition, index) => (
-                                        <Text key={index} style={styles.condition}>• {condition}</Text>
-                                    ))}
+                                    <Animated.View
+                                        style={{
+                                            transform: [{
+                                                translateY: anim.interpolate({
+                                                    inputRange: [0, 1],
+                                                    outputRange: [-20, 0], // Changed from [20, 0] to [-20, 0]
+                                                })
+                                            }],
+                                            opacity: anim.interpolate({
+                                                inputRange: [0, 1],
+                                                outputRange: [0, 1]
+                                            })
+                                        }}
+                                    >
+                                        <Text style={styles.desc}>{item.description}</Text>
+                                        <Text style={styles.subheading}>Common underlying conditions:</Text>
+                                        {item.conditions.map((condition, index) => (
+                                            <Text key={index} style={styles.condition}>• {condition}</Text>
+                                        ))}
+                                    </Animated.View>
                                 </View>
                             )}
                         </Animated.View>
@@ -131,18 +190,19 @@ export default function Tab() {
 const styles = StyleSheet.create({
     container: {
         flex: 1,
-        paddingTop: 24, // Increased padding
+        paddingTop: 32, // Increased from 24 to 32
         backgroundColor: '#fff',
     },
     heading: {
-        fontSize: 28, // Larger heading
+        fontSize: 28,
         fontWeight: '700',
         textAlign: 'center',
-        marginBottom: 16,
-        color: '#000', // Ensuring maximum contrast
+        marginBottom: 24, // Increased from 16 to 24
+        color: '#000',
     },
     list: {
-        paddingHorizontal: 20, // More padding
+        paddingHorizontal: 20,
+        paddingTop: 8, // Added padding top to list
     },
     item: {
         marginBottom: 16, // More space between items
