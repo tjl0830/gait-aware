@@ -191,7 +191,6 @@ const styles = StyleSheet.create({
     container: {
         flex: 1,
         paddingTop: 32, // Increased from 24 to 32
-        backgroundColor: '#fff',
     },
     heading: {
         fontSize: 28,
@@ -208,7 +207,7 @@ const styles = StyleSheet.create({
         marginBottom: 16, // More space between items
         borderRadius: 12, // Slightly larger radius
         borderWidth: 1.5, 
-        borderColor: '#d0d0d0',
+        borderColor: '#a1a1a1ff',
         overflow: 'hidden',
         backgroundColor: '#ffffff', // Pure white background
     },
@@ -218,7 +217,7 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         paddingVertical: 16, // More padding
         paddingHorizontal: 16,
-        backgroundColor: '#f8f8f8', // Slight contrast for header
+        backgroundColor: '#f7f7f7ff', // Slight contrast for header
     },
     title: {
         fontSize: 20, // Larger title
