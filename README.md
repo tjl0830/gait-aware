@@ -1,4 +1,5 @@
 # Reminders lang:
+- message before pushing major features
 - always pull before developing
 - commit small, split commits based on purpose
 - use conventional commits
