@@ -1,5 +1,6 @@
 import { Stack } from 'expo-router';
 import { Image } from 'react-native';
+import DisclaimerModal from './disclaimer_modal';
 
 export default function Layout() {
   return (
@@ -19,6 +20,7 @@ export default function Layout() {
           headerStyle: { backgroundColor: '#fff' },
         }} 
       />
+      <DisclaimerModal />
     </Stack>
   );
 }
