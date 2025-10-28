@@ -6,6 +6,7 @@
 ---
 
 ## 📋 Table of Contents
+
 1. [One-Time Setup](#one-time-setup)
 2. [Daily Development Workflow](#daily-development-workflow)
 3. [Testing Other Members' Features](#testing-others-features)
@@ -17,6 +18,7 @@
 ## 🎯 One-Time Setup
 
 ### Prerequisites
+
 - ✅ Android device or Android Emulator
 - ✅ Node.js installed (v18 or higher)
 - ✅ Git installed
@@ -39,17 +41,17 @@ cd gait-aware
 
 ---
 
-### Step 2: Switch to Development Branch
+### Step 2: Switch to Main Branch
 
 ```bash
 # Fetch all branches
 git fetch origin
 
-# Switch to the main development branch
-git checkout development
+# Switch to the main branch
+git checkout main
 
 # Pull latest changes
-git pull origin development
+git pull origin main
 ```
 
 ---
@@ -70,6 +72,7 @@ npm install
 #### **Option A: Using QR Code (Easiest)**
 
 1. **Open the build link on your computer:**
+
    ```
    https://expo.dev/accounts/caelianzspn/projects/gait-aware/builds/89123963-dca0-4a87-9b91-7e2537a80aa1
    ```
@@ -77,12 +80,14 @@ npm install
 2. **Click "Install" button** - A QR code will appear
 
 3. **On your Android phone:**
+
    - Open Camera app
    - Scan the QR code
    - Tap the notification to open in browser
    - Download the `.apk` file
 
 4. **Install the APK:**
+
    - Open the downloaded file
    - If you see "Unsafe app blocked", tap **"Install anyway"**
    - This is safe - you built this app!
@@ -113,10 +118,11 @@ npx expo start
 ```
 
 **You should see:**
+
 ```
 ▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄
 █ ▄▄▄▄▄ █▄▄███▄ ████▄█▄  ▀ █
-█ █   █ █ ▀█ ▄ ▄ ▄▀▀▄▀█▄▀▀ 
+█ █   █ █ ▀█ ▄ ▄ ▄▀▀▄▀█▄▀▀
 █ █▄▄▄█ █▄ ▄▄▀▀█▄▄ ▄  ▄██ ▄
 ▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄
 
@@ -124,10 +130,12 @@ npx expo start
 ```
 
 **On your device:**
+
 1. Open the **GaitAware** app
 2. It should connect automatically and show the app!
 
 **If it doesn't connect automatically:**
+
 - Shake your device
 - Tap "Scan QR Code"
 - Scan the QR code from the terminal
@@ -141,11 +149,11 @@ npx expo start
 ### Every Morning (or when starting work):
 
 ```bash
-# 1. Make sure you're on development branch
-git checkout development
+# 1. Make sure you're on main branch
+git checkout main
 
 # 2. Pull latest changes from the team
-git pull origin development
+git pull origin main
 
 # 3. Update dependencies (only if package.json changed)
 npm install
@@ -206,6 +214,7 @@ npx expo start
 ### Scenario: Team Code Review Session
 
 **One person (usually the feature author):**
+
 ```bash
 git checkout feat/feature-to-review
 npx expo start
@@ -213,6 +222,7 @@ npx expo start
 ```
 
 **Everyone else:**
+
 - Open GaitAware app
 - Scan the QR code
 - Test the feature together!
@@ -225,6 +235,7 @@ npx expo start
 ### Issue 1: "Cannot find module" error
 
 **Solution:**
+
 ```bash
 # Delete node_modules and reinstall
 rm -rf node_modules
@@ -234,6 +245,7 @@ npm install
 ### Issue 2: App won't connect to dev server
 
 **Solution:**
+
 1. Make sure phone and computer are on **same WiFi network**
 2. Shake device → Tap "Settings" → Enter the URL manually:
    ```
@@ -244,12 +256,14 @@ npm install
 ### Issue 3: "Port 8081 already in use"
 
 **Solution:**
+
 ```bash
 # Kill the process and restart
 npx expo start --clear
 ```
 
 Or use a different port:
+
 ```bash
 npx expo start --port 8082
 ```
@@ -257,6 +271,7 @@ npx expo start --port 8082
 ### Issue 4: Changes not appearing
 
 **Solution:**
+
 1. In terminal, press `r` to reload
 2. Or shake device → "Reload"
 3. If still not working: `npx expo start --clear`
@@ -264,12 +279,13 @@ npx expo start --port 8082
 ### Issue 5: Git conflicts when pulling
 
 **Solution:**
+
 ```bash
 # Stash your changes
 git stash
 
 # Pull latest
-git pull origin development
+git pull origin main
 
 # Apply your changes back
 git stash pop
@@ -314,8 +330,8 @@ Shake device → Open developer menu
 
 ```bash
 # Daily start
-git checkout development
-git pull origin development
+git checkout main
+git pull origin main
 
 # New feature
 git checkout -b feat/feature-name
@@ -337,23 +353,28 @@ npx expo start
 ## ⚡ Development Tips
 
 ### 1. Fast Reload is Your Friend
+
 - Save file → See changes in 2-3 seconds
 - No need to rebuild the app!
 
 ### 2. Work in Feature Branches
+
 - Never work directly on `main` or `development`
 - Always create: `feat/`, `fix/`, `style/` branches
 
 ### 3. Commit Often
+
 - Commit after completing small tasks
 - Use meaningful commit messages
 - Push at least once per work session
 
 ### 4. Test on Real Device
+
 - Emulator is good, but real device is better
 - Test different screen sizes if possible
 
 ### 5. Communicate with Team
+
 - Push your work before end of day
 - Pull latest code before starting work
 - Ask for code reviews on significant changes
@@ -363,6 +384,7 @@ npx expo start
 ## 🔄 When Do We Need to Rebuild?
 
 ### ✅ **NO REBUILD NEEDED** for:
+
 - UI changes
 - Logic updates
 - New React components
@@ -373,11 +395,13 @@ npx expo start
 **Just save and see instant updates!**
 
 ### ❌ **REBUILD REQUIRED** for:
+
 - Adding native modules (very rare)
 - Changing `app.json` configuration
 - Updating native dependencies
 
 **When this happens:**
+
 - Notify the team
 - One person builds: `eas build --platform android --profile development`
 - Share new build link
@@ -397,31 +421,35 @@ A: Yes! Each person runs their own `npx expo start`.
 
 **Q: What if I mess something up?**  
 A: Don't worry! Use git to revert:
+
 ```bash
 git checkout -- .  # Discard all changes
 ```
 
 **Q: How do I update to the latest code?**  
-A: `git pull origin development` then `npm install`
+A: `git pull origin main` then `npm install`
 
 ---
 
 ## 🎯 Summary Checklist
 
 **One-Time Setup:**
+
 - [ ] Clone repository
 - [ ] Install dependencies (`npm install`)
 - [ ] Install dev build on device
 - [ ] Test with `npx expo start`
 
 **Daily Development:**
-- [ ] `git pull origin development`
+
+- [ ] `git pull origin main`
 - [ ] `npx expo start`
 - [ ] Open app on device
 - [ ] Code → Save → Test
 - [ ] Commit and push
 
 **Before Leaving:**
+
 - [ ] Commit your work
 - [ ] Push to your branch
 - [ ] Stop server (Ctrl+C)

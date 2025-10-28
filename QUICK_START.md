@@ -7,6 +7,7 @@
 ## 📱 Step 1: Install the App (One Time)
 
 1. **Open this link on your phone:**
+
    ```
    https://expo.dev/accounts/caelianzspn/projects/gait-aware/builds/89123963-dca0-4a87-9b91-7e2537a80aa1
    ```
@@ -26,9 +27,9 @@
 git clone https://github.com/tjl0830/gait-aware.git
 cd gait-aware
 
-# Switch to development branch
-git checkout development
-git pull origin development
+# Pull latest changes from main
+git checkout main
+git pull origin main
 
 # Install dependencies
 npm install
@@ -42,7 +43,7 @@ npm install
 
 ```bash
 # Pull latest changes
-git pull origin development
+git pull origin main
 
 # Start server
 npx expo start
@@ -59,8 +60,8 @@ npx expo start
 
 ```bash
 # Morning
-git checkout development
-git pull origin development
+git checkout main
+git pull origin main
 
 # Create your feature
 git checkout -b feat/your-feature
@@ -80,14 +81,17 @@ git push origin feat/your-feature
 ## 🆘 Quick Fixes
 
 **App won't connect?**
+
 ```bash
 npx expo start --clear
 ```
 
 **Changes not showing?**
+
 - Press `r` in terminal OR shake device → Reload
 
 **Git conflict?**
+
 ```bash
 git stash
 git pull
