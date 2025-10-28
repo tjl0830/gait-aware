@@ -1,11 +1,11 @@
 {
   "expo": {
     "name": "GaitAware",
-    "slug": "my-expo-app-test",
+    "slug": "gait-aware",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/gaitaware_logo.png",
-    "scheme": "myexpoapptest",
+    "scheme": "gaitaware",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "ios": {
