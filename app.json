@@ -1,11 +1,11 @@
 {
   "expo": {
     "name": "GaitAware",
-    "slug": "my-expo-app-test",
+    "slug": "gait-aware",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/gaitaware_logo.png",
-    "scheme": "myexpoapptest",
+    "scheme": "gaitaware",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "ios": {
@@ -19,7 +19,8 @@
         "monochromeImage": "./assets/images/android-icon-monochrome.png"
       },
       "edgeToEdgeEnabled": true,
-      "predictiveBackGestureEnabled": false
+      "predictiveBackGestureEnabled": false,
+      "package": "com.caelianzspn.gaitaware"
     },
     "web": {
       "output": "static",
@@ -44,6 +45,13 @@
     "experiments": {
       "typedRoutes": true,
       "reactCompiler": true
-    }
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "45c210cc-4f68-4a91-b35a-d0f6c220ae4f"
+      }
+    },
+    "owner": "caelianzspn"
   }
 }
