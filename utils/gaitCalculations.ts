@@ -3,21 +3,21 @@
  * Calculate walking metrics from pose landmarks
  */
 
-import type { PoseLandmarkerResult } from 'react-native-mediapipe';
-import { LandmarkIndices } from './poseDetection';
+import type { PoseLandmarkerResult } from "react-native-mediapipe";
+import { LandmarkIndices } from "./poseDetection";
 
 export interface GaitMetrics {
   // Phase 1 Metrics
-  walkingSpeed: number | null;      // meters per second
-  cadence: number | null;           // steps per minute
-  stepLength: number | null;        // meters
-  strideLength: number | null;      // meters
-  
+  walkingSpeed: number | null; // meters per second
+  cadence: number | null; // steps per minute
+  stepLength: number | null; // meters
+  strideLength: number | null; // meters
+
   // Phase 2 Metrics (future)
-  stepWidth?: number;               // meters
-  symmetry?: number;                // 0-1 (1 = perfect symmetry)
-  kneeFlexionAngle?: number;        // degrees
-  hipFlexionAngle?: number;         // degrees
+  stepWidth?: number; // meters
+  symmetry?: number; // 0-1 (1 = perfect symmetry)
+  kneeFlexionAngle?: number; // degrees
+  hipFlexionAngle?: number; // degrees
 }
 
 /**
@@ -38,23 +38,23 @@ function calculateDistance(
  * Step length = distance from one ankle to the other when stepping
  */
 export function calculateStepLength(
-  landmarks: PoseLandmarkerResult['landmarks'][0]
+  landmarks: PoseLandmarkerResult["landmarks"][0]
 ): number | null {
   try {
     const leftAnkle = landmarks[LandmarkIndices.LEFT_ANKLE];
     const rightAnkle = landmarks[LandmarkIndices.RIGHT_ANKLE];
-    
+
     if (!leftAnkle || !rightAnkle) return null;
-    
+
     // Distance in normalized coordinates (0-1)
     // Will need calibration with real-world measurements
     const normalizedDistance = calculateDistance(leftAnkle, rightAnkle);
-    
+
     // TODO: Convert from normalized to real-world meters
     // This requires camera calibration or reference object
     return normalizedDistance;
   } catch (error) {
-    console.error('Error calculating step length:', error);
+    console.error("Error calculating step length:", error);
     return null;
   }
 }
@@ -62,7 +62,9 @@ export function calculateStepLength(
 /**
  * Calculate stride length (2x step length for one complete gait cycle)
  */
-export function calculateStrideLength(stepLength: number | null): number | null {
+export function calculateStrideLength(
+  stepLength: number | null
+): number | null {
   return stepLength ? stepLength * 2 : null;
 }
 
@@ -72,14 +74,14 @@ export function calculateStrideLength(stepLength: number | null): number | null 
  * @returns Array of frame indices where heel strikes occurred
  */
 export function detectHeelStrikes(
-  landmarksTimeSeries: PoseLandmarkerResult['landmarks'][]
+  landmarksTimeSeries: PoseLandmarkerResult["landmarks"][]
 ): number[] {
   const heelStrikes: number[] = [];
-  
+
   // TODO: Implement heel strike detection
   // Look for minima in ankle y-position (heel touching ground)
   // Use velocity and acceleration thresholds
-  
+
   return heelStrikes;
 }
 
@@ -95,11 +97,11 @@ export function calculateCadence(
   duration: number
 ): number | null {
   if (heelStrikes.length < 2) return null;
-  
+
   const stepCount = heelStrikes.length;
   const stepsPerSecond = stepCount / duration;
   const stepsPerMinute = stepsPerSecond * 60;
-  
+
   return stepsPerMinute;
 }
 
@@ -113,11 +115,11 @@ export function calculateWalkingSpeed(
   cadence: number | null
 ): number | null {
   if (!strideLength || !cadence) return null;
-  
+
   // Speed (m/s) = stride length (m) × cadence (steps/min) / 60
   const stepsPerSecond = cadence / 60;
   const metersPerSecond = strideLength * stepsPerSecond;
-  
+
   return metersPerSecond;
 }
 
@@ -128,28 +130,29 @@ export function calculateWalkingSpeed(
  * @param videoDuration - Video duration in seconds
  */
 export function analyzeGait(
-  landmarksTimeSeries: PoseLandmarkerResult['landmarks'][],
+  landmarksTimeSeries: PoseLandmarkerResult["landmarks"][],
   videoFPS: number,
   videoDuration: number
 ): GaitMetrics {
   // Calculate step lengths for each frame
   const stepLengths = landmarksTimeSeries
-    .map(landmarksArray => calculateStepLength(landmarksArray[0]))
+    .map((landmarksArray) => calculateStepLength(landmarksArray[0]))
     .filter((length): length is number => length !== null);
-  
-  const avgStepLength = stepLengths.length > 0
-    ? stepLengths.reduce((a, b) => a + b, 0) / stepLengths.length
-    : null;
-  
+
+  const avgStepLength =
+    stepLengths.length > 0
+      ? stepLengths.reduce((a, b) => a + b, 0) / stepLengths.length
+      : null;
+
   const strideLength = calculateStrideLength(avgStepLength);
-  
+
   // Detect heel strikes
   const heelStrikes = detectHeelStrikes(landmarksTimeSeries);
   const cadence = calculateCadence(heelStrikes, videoFPS, videoDuration);
-  
+
   // Calculate walking speed
   const walkingSpeed = calculateWalkingSpeed(strideLength, cadence);
-  
+
   return {
     walkingSpeed,
     cadence,

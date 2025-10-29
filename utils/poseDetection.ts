@@ -3,7 +3,12 @@
  * Wrapper functions for MediaPipe pose detection
  */
 
-import { PoseDetectionOnImage, type PoseLandmarkerResult } from 'react-native-mediapipe';
+import {
+  Delegate,
+  PoseDetectionOnImage,
+  type PoseDetectionResultBundle,
+  type PoseLandmarkerResult,
+} from "react-native-mediapipe";
 
 /**
  * Detect pose landmarks from a single image/video frame
@@ -12,18 +17,30 @@ import { PoseDetectionOnImage, type PoseLandmarkerResult } from 'react-native-me
  */
 export async function detectPoseInImage(
   imageUri: string
-): Promise<PoseLandmarkerResult> {
+): Promise<PoseLandmarkerResult | null> {
   try {
-    const result = await PoseDetectionOnImage(
+    const resultBundle: PoseDetectionResultBundle = await PoseDetectionOnImage(
       imageUri,
-      'pose_landmarker_full.task',
-      'IMAGE'
+      "pose_landmarker_full.task",
+      {
+        numPoses: 1,
+        minPoseDetectionConfidence: 0.5,
+        minPosePresenceConfidence: 0.5,
+        minTrackingConfidence: 0.5,
+        shouldOutputSegmentationMasks: false,
+        delegate: Delegate.GPU,
+      }
     );
-    
-    return result;
+
+    // Extract the first result from the results array
+    if (resultBundle.results && resultBundle.results.length > 0) {
+      return resultBundle.results[0];
+    }
+
+    return null;
   } catch (error) {
-    console.error('Pose detection error:', error);
-    throw new Error(`Failed to detect pose: ${error}`);
+    console.error("Pose detection error:", error);
+    return null;
   }
 }
 
@@ -38,7 +55,7 @@ export async function detectPoseInVideo(
   // TODO: Implement video frame extraction
   // This will use expo-av or expo-video to extract frames
   // then run detectPoseInImage on each frame
-  throw new Error('Video pose detection not yet implemented');
+  throw new Error("Video pose detection not yet implemented");
 }
 
 /**
