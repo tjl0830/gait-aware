@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/control_utils/control_utils.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/pose/pose.js" crossorigin="anonymous"></script>
+    <style>
+        .container { 
+            position: relative;
+            width: 100%;
+            height: 100vh;
+            overflow: hidden;
+        }
+        #output_canvas {
+            position: absolute;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+        }
+        .video-player {
+            position: absolute;
+            /* keep hidden but allow playback */
+            width: 1px;
+            height: 1px;
+            opacity: 0.01;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container">
+        <video class="video-player" width="1280px" height="720px"></video>
+        <canvas id="output_canvas" width="1280px" height="720px"></canvas>
+    </div>
+    <script>
+        // MediaPipe Pose instance
+        const pose = new Pose({
+            locateFile: (file) => {
+                return `https://cdn.jsdelivr.net/npm/@mediapipe/pose/${file}`;
+            }
+        });
+
+        // Configure pose detection
+        pose.setOptions({
+            modelComplexity: 2,
+            smoothLandmarks: true,
+            minDetectionConfidence: 0.5,
+            minTrackingConfidence: 0.5
+        });
+
+    // Setup video and canvas elements
+        const videoElement = document.querySelector('.video-player');
+        const canvasElement = document.querySelector('#output_canvas');
+        const canvasCtx = canvasElement.getContext('2d');
+        const results = {
+            frames: [],
+            metadata: {
+                frame_count: 0,
+                width: 0,
+                height: 0,
+                fps: 0
+            }
+        };
+        let processing = false;
+        let totalFrames = 0;
+        let targetFps = 30;
+
+        // Handle messages from React Native (support both window and document listeners)
+        const messageHandler = async function(event) {
+            try {
+                const raw = event?.data ?? event;
+                const message = typeof raw === 'string' ? JSON.parse(raw) : JSON.parse(String(raw));
+
+                if (message.type === 'process_video') {
+                    // Acknowledge receipt
+                    window.ReactNativeWebView?.postMessage?.(JSON.stringify({ type: 'status', message: 'Received video. Preparing...' }));
+                    try {
+                        // Prepare video element for autoplay policies
+                        videoElement.muted = true;
+                        videoElement.playsInline = true;
+                        videoElement.src = message.video;
+
+                        // Wait for metadata to load
+                        await new Promise((resolve, reject) => {
+                            const onMeta = () => { cleanup(); resolve(); };
+                            const onErr = (e) => { cleanup(); reject(e); };
+                            const cleanup = () => {
+                                videoElement.removeEventListener('loadedmetadata', onMeta);
+                                videoElement.removeEventListener('error', onErr);
+                            };
+                            videoElement.addEventListener('loadedmetadata', onMeta, { once: true });
+                            videoElement.addEventListener('error', onErr, { once: true });
+                        });
+
+                        // Prepare processing settings
+                        results.frames = [];
+                        results.metadata.frame_count = 0;
+                        results.metadata.width = videoElement.videoWidth || 0;
+                        results.metadata.height = videoElement.videoHeight || 0;
+                        targetFps = Number(message.options?.fps) || 30;
+                        results.metadata.fps = targetFps;
+
+                        const duration = Math.max(0, Number(videoElement.duration) || 0);
+                        totalFrames = Math.max(1, Math.floor(duration * targetFps));
+
+                        // Deterministic, seek-driven processing (no reliance on videoElement.ended)
+                        processing = true;
+                        videoElement.pause();
+                        window.ReactNativeWebView?.postMessage?.(JSON.stringify({ type: 'status', message: `Starting pose… ${totalFrames} frames @ ${targetFps}fps` }));
+
+                        await processVideo(duration);
+                    } catch (error) {
+                        window.ReactNativeWebView?.postMessage?.(JSON.stringify({
+                            type: 'error',
+                            message: error?.message || String(error)
+                        }));
+                    }
+                }
+            } catch (e) {
+                window.ReactNativeWebView?.postMessage?.(JSON.stringify({ type: 'error', message: 'Failed to parse message: ' + (e?.message || String(e)) }));
+            }
+        };
+        window.addEventListener('message', messageHandler);
+        document.addEventListener('message', messageHandler);
+
+        // Process video frames
+        async function processVideo(duration) {
+            // Install results handler once per processing session
+            pose.onResults((poseResults) => {
+                if (!processing) return;
+                if (poseResults.poseLandmarks) {
+                    // Store landmarks for this frame
+                    results.frames.push({
+                        frame_index: results.metadata.frame_count,
+                        landmarks: poseResults.poseLandmarks.map(landmark => ({
+                            x: landmark.x,
+                            y: landmark.y,
+                            z: landmark.z,
+                            visibility: landmark.visibility
+                        }))
+                    });
+
+                    // Update progress
+                    results.metadata.frame_count++;
+                    const progress = totalFrames > 0 ? (results.metadata.frame_count / totalFrames) * 100 : 0;
+                    window.ReactNativeWebView.postMessage(JSON.stringify({
+                        type: 'progress',
+                        frameIndex: results.metadata.frame_count,
+                        percent: progress
+                    }));
+
+                    // Optional: Draw landmarks for debugging
+                    canvasCtx.save();
+                    canvasCtx.clearRect(0, 0, canvasElement.width, canvasElement.height);
+                    canvasCtx.drawImage(poseResults.image, 0, 0, canvasElement.width, canvasElement.height);
+                    if (poseResults.poseLandmarks) {
+                        drawConnectors(canvasCtx, poseResults.poseLandmarks, POSE_CONNECTIONS, { color: '#00FF00', lineWidth: 2 });
+                        drawLandmarks(canvasCtx, poseResults.poseLandmarks, { color: '#FF0000', lineWidth: 1 });
+                    }
+                    canvasCtx.restore();
+                }
+            });
+
+            // Seek-based deterministic sampling
+            for (let i = 0; i < totalFrames && processing; i++) {
+                const t = Math.min(duration, i / targetFps);
+                await new Promise((resolve, reject) => {
+                    const onSeeked = () => { cleanup(); resolve(); };
+                    const onErr = (e) => { cleanup(); reject(e); };
+                    const cleanup = () => {
+                        videoElement.removeEventListener('seeked', onSeeked);
+                        videoElement.removeEventListener('error', onErr);
+                    };
+                    videoElement.addEventListener('seeked', onSeeked, { once: true });
+                    videoElement.addEventListener('error', onErr, { once: true });
+                    videoElement.currentTime = t;
+                });
+
+                await pose.send({ image: videoElement });
+            }
+
+            processing = false;
+            // Send final results once loop completes
+            window.ReactNativeWebView.postMessage(JSON.stringify({
+                type: 'complete',
+                results
+            }));
+
+            // Reset video position
+            videoElement.currentTime = 0;
+        }
+
+        // Send ready status
+        window.ReactNativeWebView.postMessage(JSON.stringify({
+            type: 'status',
+            message: 'MediaPipe Pose initialized'
+        }));
+    </script>
+</body>
+</html>
