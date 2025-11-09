@@ -1,6 +1,6 @@
 import { useVideoPlayer } from 'expo-video';
 import React, { useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, Alert, Button, Platform, ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
+import { ActivityIndicator, Alert, Button, Image, Platform, ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import { WebView } from 'react-native-webview';
 // Use legacy API to avoid deprecation error in SDK 54
 import { Asset } from 'expo-asset';
@@ -9,6 +9,7 @@ import { VideoPicker } from '../../components/VideoPicker';
 import { VideoPreview } from '../../components/VideoPreview';
 import { useVideoPickerLogic } from '../../components/hooks/useVideoPickerLogic';
 import UserInfo from '../user_info';
+import { generateSeiFromPoseJson } from '../utils/seiUtils';
 
 type PoseResult = {
   success: boolean;
@@ -25,6 +26,9 @@ export default function Tab() {
   const [progress, setProgress] = useState<{ frameIndex: number; percent?: number } | null>(null);
   const [result, setResult] = useState<PoseResult | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [seiPng, setSeiPng] = useState<string | null>(null);
+  const [seiSavedPath, setSeiSavedPath] = useState<string | null>(null);
+  const [generating, setGenerating] = useState(false);
   const [htmlContent, setHtmlContent] = useState<string>('');
   const webViewRef = useRef<WebView>(null);
   const [webViewReady, setWebViewReady] = useState(false);
@@ -152,7 +156,7 @@ export default function Tab() {
         options: {
           minDetectionConfidence: 0.5,
           minTrackingConfidence: 0.5,
-          fps: 15
+          fps: 30
         }
       }));
     } catch (err: any) {
@@ -160,6 +164,83 @@ export default function Tab() {
       setRunning(false);
     }
   }
+
+  // Generate SEI (simple averaged joints -> PNG)
+  const onGenerateSei = async () => {
+    try {
+      setError(null);
+      setGenerating(true);
+      setSeiPng(null);
+      setSeiSavedPath(null);
+
+      if (!result?.outputFile) {
+        Alert.alert('No JSON', 'Run analysis first to generate keypoints JSON.');
+        setGenerating(false);
+        return;
+      }
+
+      // BlazePose connections (common links between landmarks)
+      const BLAZEPOSE_CONNECTIONS = [
+        [11, 12], // shoulders
+        [11, 13], [13, 15], // left arm
+        [12, 14], [14, 16], // right arm
+        [11, 23], [12, 24], // shoulders to hips
+        [23, 24], // hips
+        [23, 25], [25, 27], [27, 31], // left leg
+        [24, 26], [26, 28], [28, 32], // right leg
+        [0, 2], [0, 5] // nose to eyes
+      ];
+
+      const baseName = (fileName?.split('.')[0]) || 'video';
+      // Use default parameters (lineThickness=4, jointRadius=4) for brighter, more visible SEI
+      const { png, path } = await generateSeiFromPoseJson(result.outputFile, baseName, { size: 224 });
+
+      setSeiPng(png);
+      setSeiSavedPath(path);
+      setGenerating(false);
+    } catch (e: any) {
+      setGenerating(false);
+      setError(e?.message || String(e));
+    }
+  };
+
+  // Export SEI file to Downloads using SAF (Android)
+  const onExportSei = async () => {
+    try {
+      if (!seiSavedPath) {
+        Alert.alert('No file', 'Generate the SEI first.');
+        return;
+      }
+
+      const baseName = fileName?.split('.')[0] || 'video';
+      if (Platform.OS === 'android') {
+        const SAF = (FileSystem as any).StorageAccessFramework;
+        if (!SAF?.requestDirectoryPermissionsAsync) {
+          Alert.alert('Not supported', 'Storage Access Framework is not available.');
+          return;
+        }
+
+        const perms = await SAF.requestDirectoryPermissionsAsync();
+        if (!perms.granted) {
+          Alert.alert('Permission denied', 'Export cancelled.');
+          return;
+        }
+
+        const filename = `${baseName}_sei.png`;
+        const destUri = await SAF.createFileAsync(perms.directoryUri, filename, 'image/png');
+        // Read the PNG file as base64 and write to the destination
+        const content = await FileSystem.readAsStringAsync(seiSavedPath, { encoding: FileSystem.EncodingType.Base64 });
+        await FileSystem.writeAsStringAsync(destUri, content, { encoding: FileSystem.EncodingType.Base64 });
+        Alert.alert('Exported', 'SEI PNG saved to the selected folder.');
+      } else {
+        Alert.alert('Saved', `App file path:
+${seiSavedPath}`);
+      }
+    } catch (e: any) {
+      console.error('Export failed:', e);
+      Alert.alert('Export failed', e?.message || String(e));
+    }
+  };
 
   // Export JSON to a user-selected folder (e.g., Downloads on Android) using SAF
   const onExportJson = async () => {
@@ -288,6 +369,37 @@ export default function Tab() {
             </View>
           )}
         </View>
+
+          {/* Step 3: Generate SEI */}
+          <View style={styles.extractionContainer}>
+            <Text style={styles.stepTitle}>Step 3: Generate SEI</Text>
+            <Button title="Generate SEI" onPress={onGenerateSei} disabled={!result || generating} />
+
+            {generating && (
+              <View style={styles.progress}>
+                <ActivityIndicator size="large" />
+                <Text style={styles.progressText}>Generating SEI…</Text>
+              </View>
+            )}
+
+            {seiPng && (
+              <View style={{ marginTop: 12, alignItems: 'center' }}>
+                <Text style={{ fontWeight: '600' }}>SEI Preview</Text>
+                <Image
+                  source={{ uri: `data:image/png;base64,${seiPng}` }}
+                  style={{ width: 224, height: 224, marginTop: 8, borderWidth: 1, borderColor: '#ddd' }}
+                />
+              </View>
+            )}
+
+            {seiSavedPath && (
+              <Text style={{ marginTop: 8 }}>Saved: {seiSavedPath}</Text>
+            )}
+
+            <View style={{ marginTop: 12 }}>
+              <Button title="Export SEI to Downloads" onPress={onExportSei} disabled={!seiSavedPath} />
+            </View>
+          </View>
       </View>
     </ScrollView>
   );
