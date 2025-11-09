@@ -108,13 +108,6 @@ function UserInfo() {
           placeholder="Enter notes"
         />
       </View>
-
-      <TouchableOpacity 
-        style={styles.button}
-        // onPress={handleSubmit}
-      >
-        <Text style={styles.buttonText}>Next Step</Text>
-      </TouchableOpacity>
     </View>
   );
 }
