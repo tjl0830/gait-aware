@@ -13,10 +13,18 @@ type GaitType = {
     id: string;
     title: string;
     description: string;
-    conditions: string[]; // Add this field
+    conditions: string[];
 };
 
 const GAIT_TYPES: GaitType[] = [
+  {
+    id: 'normal',
+    title: 'Normal gait',
+    description: 'A steady, balanced way of walking where both legs move smoothly in rhythm. There is even weight on both sides, proper foot lift, and coordinated arm swing.',
+    conditions: [
+        'None; this is the standard walking pattern'
+    ]
+  },
   {
     id: 'antalgic',
     title: 'Antalgic gait',
@@ -52,7 +60,7 @@ const GAIT_TYPES: GaitType[] = [
   },
   {
     id: 'shuffling',
-    title: 'Shuffling gait',
+    title: 'Shuffling gait (Parkinsonian gait)',
     description: 'Short, dragging steps with little foot lift, often with a stooped posture and reduced arm swing.',
     conditions: [
       'Parkinson’s disease',
@@ -61,9 +69,9 @@ const GAIT_TYPES: GaitType[] = [
     ]
   },
   {
-    id: 'spastic',
-    title: 'Spastic gait',
-    description: 'Stiff and jerky walking. The leg may swing in a circle instead of moving straight forward.',
+    id: 'hemiplegic',
+    title: 'Hemiplegic gait',
+    description: 'The affected leg is stiff and swings in a half-circle (circumduction) while the arm on the same side may stay flexed.',
     conditions: [
       'Stroke',
       'Multiple sclerosis',
@@ -72,24 +80,24 @@ const GAIT_TYPES: GaitType[] = [
     ]
   },
   {
-    id: 'steppage',
-    title: 'Steppage gait (Foot drop)',
+    id: 'neuropathic',
+    title: 'Neuropathic gait (Foot drop)',
     description: 'The person lifts the foot higher than normal to avoid tripping because the toes do not lift properly.',
     conditions: [
       'Peroneal nerve injury',
-      'Diabetic nerve damage',
+      'Diabetic neuropathy',
       'Multiple sclerosis',
-      'Charcot-Marie-Tooth disease'
+      'Charcot–Marie–Tooth disease'
     ]
   },
   {
     id: 'waddling',
     title: 'Waddling gait',
-    description: 'A side-to-side walking motion, like a duck. The body swings when stepping forward.',
+    description: 'A side-to-side walking motion, like a duck. The body swings when moving forward.',
     conditions: [
       'Weak hip or thigh muscles',
       'Muscular dystrophy',
-      'Hip dislocation since birth',
+      'Congenital hip dislocation',
       'Obesity'
     ]
   },
@@ -104,13 +112,13 @@ const GAIT_TYPES: GaitType[] = [
     ]
   },
   {
-    id: 'scissors',
-    title: 'Scissors gait',
+    id: 'diplegic',
+    title: 'Diplegic gait (Scissors gait)',
     description: 'The legs cross or hit each other while walking, making the steps look like scissor blades.',
     conditions: [
       'Cerebral palsy',
       'Spastic paraplegia',
-      'Stroke affecting both sides'
+      'Bilateral stroke'
     ]
   }
 ];
