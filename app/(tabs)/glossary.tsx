@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import {
     Animated,
-    ScrollView,
+    FlatList,
     StyleSheet,
     Text,
     TouchableOpacity,
@@ -190,63 +190,64 @@ export default function Tab() {
                 </Text>
             </View>
 
-            <ScrollView style={styles.list} contentContainerStyle={{ paddingBottom: 24 }}>
-                {GAIT_TYPES.map(item => {
-                    const isOpen = !!expanded[item.id];
-                    // use the per-item Animated.Value (fallback to a new value if not present)
-                    const anim = animsRef.current[item.id] ?? (animsRef.current[item.id] = new Animated.Value(0));
-                    return (
-                        <Animated.View
-                            key={item.id}
-                            style={[
-                                styles.item,
-                                {
-                                    transform: [{
-                                        scale: anim.interpolate({
-                                            inputRange: [0, 1],
-                                            outputRange: [1, 1.01], // subtle scale for the selected item
-                                        })
-                                    }]
-                                }
-                            ]}
-                        >
-                            <TouchableOpacity
-                                activeOpacity={0.7}
-                                onPress={() => toggle(item.id)}
-                                style={styles.header}
-                            >
-                                <Text style={styles.title}>{item.title}</Text>
-                                <Text style={styles.chev}>{isOpen ? '−' : '+'}</Text>
-                            </TouchableOpacity>
+            <FlatList
+              data={GAIT_TYPES}
+              keyExtractor={item => item.id}
+              contentContainerStyle={{ paddingBottom: 24, paddingHorizontal: 20 }}
+              renderItem={({ item }) => {
+                const isOpen = !!expanded[item.id];
+                const anim = animsRef.current[item.id] ?? (animsRef.current[item.id] = new Animated.Value(0));
+                return (
+                  <Animated.View
+                    style={[
+                      styles.item,
+                      {
+                        transform: [{
+                          scale: anim.interpolate({
+                            inputRange: [0, 1],
+                            outputRange: [1, 1.01], // subtle scale for the selected item
+                          })
+                        }]
+                      }
+                    ]}
+                  >
+                    <TouchableOpacity
+                      activeOpacity={0.7}
+                      onPress={() => toggle(item.id)}
+                      style={styles.header}
+                    >
+                      <Text style={styles.title}>{item.title}</Text>
+                      <Text style={styles.chev}>{isOpen ? '−' : '+'}</Text>
+                    </TouchableOpacity>
 
-                            {isOpen && (
-                                <View style={styles.content}>
-                                    <Animated.View
-                                        style={{
-                                            transform: [{
-                                                translateY: anim.interpolate({
-                                                    inputRange: [0, 1],
-                                                    outputRange: [-20, 0], // Changed from [20, 0] to [-20, 0]
-                                                })
-                                            }],
-                                            opacity: anim.interpolate({
-                                                inputRange: [0, 1],
-                                                outputRange: [0, 1]
-                                            })
-                                        }}
-                                    >
-                                        <Text style={styles.desc}>{item.description}</Text>
-                                        <Text style={styles.subheading}>Common underlying conditions:</Text>
-                                        {item.conditions.map((condition, index) => (
-                                            <Text key={index} style={styles.condition}>• {condition}</Text>
-                                        ))}
-                                    </Animated.View>
-                                </View>
-                            )}
+                    {isOpen && (
+                      <View style={styles.content}>
+                        <Animated.View
+                          style={{
+                            transform: [{
+                              translateY: anim.interpolate({
+                                inputRange: [0, 1],
+                                outputRange: [-20, 0], // Changed from [20, 0] to [-20, 0]
+                              })
+                            }],
+                            opacity: anim.interpolate({
+                              inputRange: [0, 1],
+                              outputRange: [0, 1]
+                            })
+                          }}
+                        >
+                          <Text style={styles.desc}>{item.description}</Text>
+                          <Text style={styles.subheading}>Common underlying conditions:</Text>
+                          {item.conditions.map((condition, index) => (
+                            <Text key={index} style={styles.condition}>• {condition}</Text>
+                          ))}
                         </Animated.View>
-                    );
-                })}
-            </ScrollView>
+                      </View>
+                    )}
+                  </Animated.View>
+                );
+              }}
+            />
         </View>
     );
 }
@@ -262,10 +263,6 @@ const styles = StyleSheet.create({
         textAlign: 'center',
         marginBottom: 24, // Increased from 16 to 24
         color: '#000',
-    },
-    list: {
-        paddingHorizontal: 20,
-        paddingTop: 8, // Added padding top to list
     },
     item: {
         marginBottom: 16, // More space between items
