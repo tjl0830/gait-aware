@@ -183,6 +183,13 @@ export default function Tab() {
     return (
         <View style={styles.container}>
             <Text style={styles.heading}>Glossary</Text>
+
+            <View style={styles.disclaimerContainer}>
+                <Text style={styles.disclaimerText}>
+                    Note: Descriptions are for general reference. Individual presentations may vary — consult a healthcare professional for assessment.
+                </Text>
+            </View>
+
             <ScrollView style={styles.list} contentContainerStyle={{ paddingBottom: 24 }}>
                 {GAIT_TYPES.map(item => {
                     const isOpen = !!expanded[item.id];
@@ -310,5 +317,21 @@ const styles = StyleSheet.create({
         lineHeight: 26,
         marginLeft: 12,
         marginBottom: 4, // Space between conditions
+    },
+    disclaimerContainer: {
+        marginHorizontal: 20,
+        marginBottom: 12,
+        paddingVertical: 10,
+        paddingHorizontal: 12,
+        backgroundColor: '#f5f5f5',
+        borderRadius: 8,
+        borderWidth: 1,
+        borderColor: '#ececec',
+    },
+    disclaimerText: {
+        fontSize: 14,
+        color: '#666',
+        lineHeight: 20,
+        fontStyle: 'italic',
     },
 });
