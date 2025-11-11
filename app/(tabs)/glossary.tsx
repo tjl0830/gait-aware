@@ -13,6 +13,7 @@ type GaitType = {
     id: string;
     title: string;
     description: string;
+    technicalDescription?: string;
     conditions: string[];
 };
 
@@ -21,6 +22,8 @@ const GAIT_TYPES: GaitType[] = [
     id: 'normal',
     title: 'Normal gait',
     description: 'A steady, balanced way of walking where both legs move smoothly in rhythm. There is even weight on both sides, proper foot lift, and coordinated arm swing.',
+    technicalDescription:
+      'Symmetric temporal–spatial parameters with normal stance/swing phase ratio, appropriate ground clearance during swing, heel‑strike initial contact, and coordinated contralateral arm swing. Cadence and stride length fall within age‑adjusted norms.',
     conditions: [
         'None; this is the standard walking pattern'
     ]
@@ -29,6 +32,8 @@ const GAIT_TYPES: GaitType[] = [
     id: 'antalgic',
     title: 'Antalgic gait',
     description: 'A way of walking used to avoid pain. The person spends less time standing on the sore or injured leg.',
+    technicalDescription:
+      'Protective gait with markedly shortened stance phase on the symptomatic limb and relatively prolonged swing phase to minimise weight‑bearing. Results in reduced step length, decreased cadence and temporal asymmetry; often accompanied by trunk lean away from painful joint.',
     conditions: [
       'Hip or knee arthritis',
       'Ankle sprain',
@@ -40,6 +45,8 @@ const GAIT_TYPES: GaitType[] = [
     id: 'ataxic',
     title: 'Ataxic gait',
     description: 'An unsteady and unbalanced walk, often wide-based or staggering, as if the person is losing balance.',
+    technicalDescription:
+      'Broad‑based, unsteady gait due to impaired proprioception or cerebellar dysfunction. Characterised by irregular step length and timing, poor coordination, truncal instability, dysmetria and difficulty with tandem walking; Romberg positive if sensory ataxia.',
     conditions: [
       'Multiple sclerosis',
       'Cerebellar stroke',
@@ -51,6 +58,8 @@ const GAIT_TYPES: GaitType[] = [
     id: 'trendelenburg',
     title: 'Trendelenburg gait',
     description: 'The hip drops on the opposite side when walking because the muscles of the standing leg are weak.',
+    technicalDescription:
+      'Pelvic drop on the contralateral side during stance due to ipsilateral gluteus medius/minimus weakness or abductor dysfunction. Compensatory trunk lean toward the stance limb reduces hip abductor moment; observable as decreased single‑limb support stability.',
     conditions: [
       'Hip muscle weakness',
       'After hip surgery',
@@ -62,6 +71,8 @@ const GAIT_TYPES: GaitType[] = [
     id: 'shuffling',
     title: 'Shuffling gait (Parkinsonian gait)',
     description: 'Short, dragging steps with little foot lift, often with a stooped posture and reduced arm swing.',
+    technicalDescription:
+      'Hypokinetic gait with reduced stride length, decreased step height, diminished arm swing and stooped posture. Initiation difficulty, reduced automaticity and possible festination; cadence may increase while stride length falls (sequence effect) in parkinsonian syndromes.',
     conditions: [
       'Parkinson’s disease',
       'Normal pressure hydrocephalus',
@@ -72,6 +83,8 @@ const GAIT_TYPES: GaitType[] = [
     id: 'hemiplegic',
     title: 'Hemiplegic gait',
     description: 'The affected leg is stiff and swings in a half-circle (circumduction) while the arm on the same side may stay flexed.',
+    technicalDescription:
+      'Unilateral spastic pattern with increased extensor tone and limited knee/ankle flexion; affected limb advances by circumduction or hip hiking. Ipsilateral arm often flexed with decreased reciprocal arm swing. Common after corticospinal tract lesions.',
     conditions: [
       'Stroke',
       'Multiple sclerosis',
@@ -83,6 +96,8 @@ const GAIT_TYPES: GaitType[] = [
     id: 'neuropathic',
     title: 'Neuropathic gait (Foot drop)',
     description: 'The person lifts the foot higher than normal to avoid tripping because the toes do not lift properly.',
+    technicalDescription:
+      'Foot‑drop gait due to dorsiflexor weakness producing inadequate toe clearance. Compensatory increased hip/knee flexion (steppage) or hip circumduction to prevent tripping. May be unilateral or bilateral depending on peripheral nerve involvement.',
     conditions: [
       'Peroneal nerve injury',
       'Diabetic neuropathy',
@@ -94,6 +109,8 @@ const GAIT_TYPES: GaitType[] = [
     id: 'waddling',
     title: 'Waddling gait',
     description: 'A side-to-side walking motion, like a duck. The body swings when moving forward.',
+    technicalDescription:
+      'Gait with exaggerated lateral trunk sway and widened base due to proximal muscle weakness (hip girdle). Pelvic instability during stance, reduced hip abduction control and compensatory foot placement produce the characteristic waddling pattern.',
     conditions: [
       'Weak hip or thigh muscles',
       'Muscular dystrophy',
@@ -105,6 +122,8 @@ const GAIT_TYPES: GaitType[] = [
     id: 'festinating',
     title: 'Festinating gait',
     description: 'Short, quick steps with the body leaning forward, as if chasing one’s own balance.',
+    technicalDescription:
+      'Progressive small‑stepped gait with forward flexed posture and increasing cadence; step length shortens while rhythm accelerates (festination). Often seen in advanced parkinsonian disorders with impaired postural reflexes.',
     conditions: [
       'Advanced Parkinson’s disease',
       'Progressive supranuclear palsy',
@@ -115,6 +134,8 @@ const GAIT_TYPES: GaitType[] = [
     id: 'diplegic',
     title: 'Diplegic gait (Scissors gait)',
     description: 'The legs cross or hit each other while walking, making the steps look like scissor blades.',
+    technicalDescription:
+      'Spastic diplegic pattern with bilateral lower‑limb adductor spasticity causing scissoring of the legs during swing. Typically reduced hip abduction, increased adductor tone and pelvic instability; common in cerebral palsy and bilateral upper motor neuron lesions.',
     conditions: [
       'Cerebral palsy',
       'Spastic paraplegia',
@@ -126,6 +147,7 @@ const GAIT_TYPES: GaitType[] = [
 
 export default function Tab() {
     const [expanded, setExpanded] = useState<Record<string, boolean>>({});
+    const [showTechnical, setShowTechnical] = useState<Record<string, boolean>>({});
     // per-item animated values so only the selected glossary item animates
     const animsRef = useRef<Record<string, Animated.Value>>({});
 
@@ -178,6 +200,15 @@ export default function Tab() {
             }
             return next;
         });
+
+        // when collapsing, also hide technical view
+        if (expanded[id]) {
+            setShowTechnical(prev => ({ ...prev, [id]: false }));
+        }
+    };
+
+    const toggleTechnical = (id: string) => {
+        setShowTechnical(prev => ({ ...prev, [id]: !prev[id] }));
     };
 
     return (
@@ -186,7 +217,7 @@ export default function Tab() {
 
             <View style={styles.disclaimerContainer}>
                 <Text style={styles.disclaimerText}>
-                    Note: Descriptions are for general reference. Individual presentations may vary — consult a healthcare professional for assessment.
+                    Note: For reference only.
                 </Text>
             </View>
 
@@ -196,6 +227,7 @@ export default function Tab() {
               contentContainerStyle={{ paddingBottom: 24, paddingHorizontal: 20 }}
               renderItem={({ item }) => {
                 const isOpen = !!expanded[item.id];
+                const isTech = !!showTechnical[item.id];
                 const anim = animsRef.current[item.id] ?? (animsRef.current[item.id] = new Animated.Value(0));
                 return (
                   <Animated.View
@@ -214,10 +246,10 @@ export default function Tab() {
                     <TouchableOpacity
                       activeOpacity={0.7}
                       onPress={() => toggle(item.id)}
-                      style={styles.header}
+                      style={[styles.header, isOpen ? styles.headerOpen : null]}
                     >
-                      <Text style={styles.title}>{item.title}</Text>
-                      <Text style={styles.chev}>{isOpen ? '−' : '+'}</Text>
+                      <Text style={[styles.title, isOpen ? styles.titleOpen : null]}>{item.title}</Text>
+                      <Text style={[styles.chev, isOpen ? styles.chevOpen : null]}>{isOpen ? '−' : '+'}</Text>
                     </TouchableOpacity>
 
                     {isOpen && (
@@ -227,7 +259,7 @@ export default function Tab() {
                             transform: [{
                               translateY: anim.interpolate({
                                 inputRange: [0, 1],
-                                outputRange: [-20, 0], // Changed from [20, 0] to [-20, 0]
+                                outputRange: [-20, 0],
                               })
                             }],
                             opacity: anim.interpolate({
@@ -236,7 +268,12 @@ export default function Tab() {
                             })
                           }}
                         >
-                          <Text style={styles.desc}>{item.description}</Text>
+                          <Text style={styles.desc}>{isTech ? (item.technicalDescription ?? item.description) : item.description}</Text>
+
+                          <TouchableOpacity onPress={() => toggleTechnical(item.id)} style={styles.technicalToggle}>
+                            <Text style={styles.technicalToggleText}>{isTech ? 'Show simpler' : 'More technical'}</Text>
+                          </TouchableOpacity>
+
                           <Text style={styles.subheading}>Common underlying conditions:</Text>
                           {item.conditions.map((condition, index) => (
                             <Text key={index} style={styles.condition}>• {condition}</Text>
@@ -267,7 +304,7 @@ const styles = StyleSheet.create({
     item: {
         marginBottom: 16, // More space between items
         borderRadius: 12, // Slightly larger radius
-        borderWidth: 1.5, 
+        borderWidth: 1.5,
         borderColor: '#a1a1a1ff',
         overflow: 'hidden',
         backgroundColor: '#ffffff', // Pure white background
@@ -280,6 +317,11 @@ const styles = StyleSheet.create({
         paddingHorizontal: 16,
         backgroundColor: '#f7f7f7ff', // Slight contrast for header
     },
+    headerOpen: {
+        backgroundColor: '#dceaff',
+        borderBottomWidth: 1,
+        borderBottomColor: '#c2d9ff',
+    },
     title: {
         fontSize: 20, // Larger title
         fontWeight: '600',
@@ -287,10 +329,16 @@ const styles = StyleSheet.create({
         flex: 1,
         paddingRight: 8,
     },
+    titleOpen: {
+        color: '#0b62d6',
+    },
     chev: {
         fontSize: 24, // Larger chevron
         fontWeight: '600',
         color: '#000',
+    },
+    chevOpen: {
+        color: '#0b62d6',
     },
     content: {
         paddingHorizontal: 16,
@@ -300,6 +348,19 @@ const styles = StyleSheet.create({
         fontSize: 18, // Larger description text
         color: '#000',
         lineHeight: 26, // Increased line height
+    },
+    technicalToggle: {
+        marginTop: 10,
+        alignSelf: 'flex-start',
+        paddingHorizontal: 10,
+        paddingVertical: 6,
+        borderRadius: 8,
+        backgroundColor: '#eef6ff',
+    },
+    technicalToggleText: {
+        color: '#0b62d6',
+        fontWeight: '600',
+        fontSize: 14,
     },
     subheading: {
         fontSize: 19, // Larger subheading
