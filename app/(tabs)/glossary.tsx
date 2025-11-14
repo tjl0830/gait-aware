@@ -215,12 +215,6 @@ export default function Tab() {
         <View style={styles.container}>
             <Text style={styles.heading}>Glossary</Text>
 
-            <View style={styles.disclaimerContainer}>
-                <Text style={styles.disclaimerText}>
-                    Note: For reference only.
-                </Text>
-            </View>
-
             <FlatList
               data={GAIT_TYPES}
               keyExtractor={item => item.id}
@@ -271,7 +265,7 @@ export default function Tab() {
                           <Text style={styles.desc}>{isTech ? (item.technicalDescription ?? item.description) : item.description}</Text>
 
                           <TouchableOpacity onPress={() => toggleTechnical(item.id)} style={styles.technicalToggle}>
-                            <Text style={styles.technicalToggleText}>{isTech ? 'Show simpler' : 'More technical'}</Text>
+                            <Text style={styles.technicalToggleText}>{isTech ? 'Switch to simple' : 'Switch to technical'}</Text>
                           </TouchableOpacity>
 
                           <Text style={styles.subheading}>Common underlying conditions:</Text>
