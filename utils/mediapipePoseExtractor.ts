@@ -17,14 +17,13 @@ const DELEGATE_CPU = 1;
 
 /**
  * Get the local file path for the MediaPipe model
- * For bare workflow, model is in android/app/src/main/assets/
+ * For Android bare workflow with assets
  */
 async function getModelPath(): Promise<string> {
   try {
     if (Platform.OS === "android") {
-      // For Android, the native module accesses assets directly
-      // Path relative to assets folder
-      const modelPath = "mediapipe_models/pose_landmarker.task";
+      // Try just the model filename - Android assets manager may look in assets/ automatically
+      const modelPath = "pose_landmarker.task";
       console.log("[MediaPipe] Using model path:", modelPath);
       return modelPath;
     }
