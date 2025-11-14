@@ -117,15 +117,23 @@ export async function extractPoseFromVideo(
 
         console.log(`[MediaPipe] Frame ${frameIndex} extracted:`, thumbnailUri);
 
+        // Convert file:// URI to absolute path for Android
+        // MediaPipe native module might need path without file:// prefix
+        let imagePath = thumbnailUri;
+        if (Platform.OS === "android" && imagePath.startsWith("file://")) {
+          imagePath = imagePath.replace("file://", "");
+          console.log(`[MediaPipe] Converted to path:`, imagePath);
+        }
+
         // Run MediaPipe pose detection on this frame
         console.log(
           `[MediaPipe] Running detectOnImage for frame ${frameIndex}...`
         );
-        
+
         let result;
         try {
           result = await poseModule.detectOnImage(
-            thumbnailUri,
+            imagePath, // Use converted path instead of thumbnailUri
             1, // numPoses
             0.3, // minPoseDetectionConfidence (lowered from 0.5)
             0.3, // minPosePresenceConfidence (lowered from 0.5)
@@ -135,7 +143,10 @@ export async function extractPoseFromVideo(
             Delegate.CPU // Use CPU delegate enum
           );
         } catch (detectionError: any) {
-          console.error(`[MediaPipe] Detection failed on frame ${frameIndex}:`, detectionError.message);
+          console.error(
+            `[MediaPipe] Detection failed on frame ${frameIndex}:`,
+            detectionError.message
+          );
           // Clean up thumbnail and skip this frame
           await FileSystem.deleteAsync(thumbnailUri, { idempotent: true });
           frameIndex++;
