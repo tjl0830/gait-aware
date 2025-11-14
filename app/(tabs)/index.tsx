@@ -1,41 +1,55 @@
-import { useVideoPlayer } from 'expo-video';
-import React, { useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, Button, Image, ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
-import { WebView } from 'react-native-webview';
-// Use legacy API to avoid deprecation error in SDK 54
-import { Asset } from 'expo-asset';
-import * as FileSystem from 'expo-file-system/legacy';
-import { VideoPicker } from '../../components/VideoPicker';
-import { VideoPreview } from '../../components/VideoPreview';
-import { useVideoPickerLogic } from '../../components/hooks/useVideoPickerLogic';
-import { exportJson, exportSei } from '../pipeline/exportPipeline';
-import { generateSei } from '../pipeline/seiPipeline';
-import { extractKeypoints, handleWebViewMessage } from '../pipeline/videoPipeline';
-import UserInfo from '../user_info';
-import { analyzeGait, GaitAnalysisResult } from '../../utils/gaitAnalysis';
-import { validatePoseDataQuality, PoseJsonData } from '../../utils/landmarkExtractor';
+/**
+ * Simplified Gait Analysis - Main Screen
+ * Clean, focused UI: Upload Video → Analyze Gait → View Results
+ */
 
-import { PoseResult } from '../pipeline/pipelineTypes';
+import { Asset } from "expo-asset";
+import * as FileSystem from "expo-file-system/legacy";
+import { useVideoPlayer } from "expo-video";
+import React, { useEffect, useRef, useState } from "react";
+import {
+  ActivityIndicator,
+  Alert,
+  Button,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
+} from "react-native";
+import { WebView } from "react-native-webview";
+import { VideoPicker } from "../../components/VideoPicker";
+import { VideoPreview } from "../../components/VideoPreview";
+import { useVideoPickerLogic } from "../../components/hooks/useVideoPickerLogic";
+import { analyzeGait, GaitAnalysisResult } from "../../utils/gaitAnalysis";
+import {
+  PoseJsonData,
+  validatePoseDataQuality,
+} from "../../utils/landmarkExtractor";
+import {
+  getVideoRequirements,
+  validateVideo,
+} from "../../utils/videoValidation";
 
-export default function Tab() {
+export default function GaitAnalysisScreen() {
   const { videoUri, fileName, pickVideo } = useVideoPickerLogic();
-  const [running, setRunning] = useState(false);
-  const [progress, setProgress] = useState<{ frameIndex: number; percent?: number } | null>(null);
-  const [result, setResult] = useState<PoseResult | null>(null);
+
+  // Analysis state
+  const [analyzing, setAnalyzing] = useState(false);
+  const [progress, setProgress] = useState<{
+    stage: string;
+    frameIndex?: number;
+    percent?: number;
+  }>({ stage: "idle" });
+  const [result, setResult] = useState<GaitAnalysisResult | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [seiPng, setSeiPng] = useState<string | null>(null);
-  const [seiSavedPath, setSeiSavedPath] = useState<string | null>(null);
-  const [generating, setGenerating] = useState(false);
-  const [gaitAnalysis, setGaitAnalysis] = useState<GaitAnalysisResult | null>(null);
-  const [analyzingGait, setAnalyzingGait] = useState(false);
-  const [gaitError, setGaitError] = useState<string | null>(null);
-  const [htmlContent, setHtmlContent] = useState<string>('');
+
+  // WebView for MediaPipe
+  const [htmlContent, setHtmlContent] = useState<string>("");
   const webViewRef = useRef<WebView>(null);
   const [webViewReady, setWebViewReady] = useState(false);
-  const [showPreview, setShowPreview] = useState(true); // Temporarily show WebView for debugging
-  const { width } = useWindowDimensions();
-  
-  const player = useVideoPlayer(videoUri, player => {
+
+  // Video player
+  const player = useVideoPlayer(videoUri, (player) => {
     if (player) {
       player.loop = true;
       player.audioTrack = null;
@@ -43,413 +57,520 @@ export default function Tab() {
     }
   });
 
-  // Load MediaPipe HTML on mount (read bundled asset as string to avoid file:// issues)
+  // Load MediaPipe HTML on mount
   useEffect(() => {
     async function loadHTML() {
       try {
-        const moduleId = require('../web/mediapipe_pose.html');
+        console.log("Loading MediaPipe HTML...");
+        // Use offline version (no CDN dependencies)
+        const moduleId = require("../web/mediapipe_pose_offline.html");
         const asset = Asset.fromModule(moduleId);
-        // Ensure the asset is available locally; on native this resolves a file:// URI
         await asset.downloadAsync();
-        if (!asset.localUri) throw new Error('HTML asset localUri not available');
-        // Read the HTML file contents and feed it directly to WebView
+        if (!asset.localUri) throw new Error("HTML asset not available");
         const content = await FileSystem.readAsStringAsync(asset.localUri);
+        console.log("MediaPipe HTML loaded successfully (offline mode)");
         setHtmlContent(content);
       } catch (err: any) {
-        console.error('Failed to load MediaPipe assets:', err);
+        console.error("Failed to load MediaPipe:", err);
+        setError("Failed to initialize pose detection engine");
       }
     }
     loadHTML();
   }, []);
 
   // Handle messages from WebView
-  const onMessage = async (event: any) => {
-    handleWebViewMessage(event, fileName, setResult, setProgress, setError, setRunning);
+  const onWebViewMessage = async (event: any) => {
     try {
+      console.log("WebView message received:", event.nativeEvent.data);
       const message = JSON.parse(event.nativeEvent.data);
-      if (message.type === 'status' && String(message.message).toLowerCase().includes('initialized')) {
-        setWebViewReady(true);
+
+      switch (message.type) {
+        case "status":
+          console.log("WebView status:", message.message);
+          if (String(message.message).toLowerCase().includes("initialized")) {
+            setWebViewReady(true);
+            console.log("WebView ready!");
+          }
+          break;
+
+        case "progress":
+          setProgress({
+            stage: "extracting",
+            frameIndex: message.frameIndex,
+            percent: message.percent,
+          });
+          break;
+
+        case "complete":
+          console.log("Pose extraction complete");
+          await handlePoseExtractionComplete(message.results);
+          break;
+
+        case "error":
+          console.error("WebView error:", message.message);
+          setError(message.message || "Pose detection failed");
+          setAnalyzing(false);
+          break;
       }
-      if (message.type === 'complete' && message.results) {
-        const baseName = fileName?.split('.')[0] || 'video';
-        const posesDir = `${FileSystem.documentDirectory}poses`;
-        const outputFile = `${posesDir}/${baseName}_pose.json`;
-        await FileSystem.makeDirectoryAsync(posesDir, { intermediates: true });
-        await FileSystem.writeAsStringAsync(outputFile, JSON.stringify(message.results, null, 2), { encoding: 'utf8' });
-        setResult({
-          success: true,
-          outputFile,
-          frameCount: message.results.metadata.frame_count,
-          width: message.results.metadata.width,
-          height: message.results.metadata.height,
-          fps: message.results.metadata.fps
-        });
-      }
-    } catch (err) {}
-  };
-
-  // Pipeline function wrappers
-  const onExtractKeypoints = () => {
-    if (!videoUri) return;
-    extractKeypoints(
-      String(videoUri),
-      webViewReady,
-      webViewRef,
-      setRunning,
-      setResult,
-      setProgress,
-      setError,
-      fileName || ''
-    );
-  };
-
-  const onGenerateSei = () => generateSei(
-    result,
-    fileName,
-    setSeiPng,
-    setSeiSavedPath,
-    setGenerating,
-    setError
-  );
-  const onExportSei = () => exportSei(seiSavedPath, fileName);
-
-  const onExportJson = () => exportJson(result, fileName);
-
-  const onAnalyzeGait = async () => {
-    if (!result?.outputFile) {
-      setGaitError('No pose data available. Please extract keypoints first.');
-      return;
+    } catch (err: any) {
+      console.error("WebView message parsing error:", err);
+      const errorMsg = err?.message || String(err);
+      setError(`Message parsing failed: ${errorMsg}`);
+      setAnalyzing(false);
     }
+  };
 
-    setAnalyzingGait(true);
-    setGaitError(null);
-    setGaitAnalysis(null);
-
+  // Handle pose extraction completion
+  const handlePoseExtractionComplete = async (results: any) => {
     try {
-      // Read the pose JSON file
-      const poseJson = await FileSystem.readAsStringAsync(result.outputFile, { encoding: 'utf8' });
-      const poseData: PoseJsonData = JSON.parse(poseJson);
+      if (!results) {
+        throw new Error("No pose data returned");
+      }
 
-      // Validate pose data quality
+      setProgress({ stage: "validating" });
+
+      // Save pose data to file
+      const baseName = fileName?.split(".")[0] || "video";
+      const posesDir = `${FileSystem.documentDirectory}poses`;
+      const outputFile = `${posesDir}/${baseName}_pose.json`;
+
+      await FileSystem.makeDirectoryAsync(posesDir, { intermediates: true });
+      await FileSystem.writeAsStringAsync(
+        outputFile,
+        JSON.stringify(results, null, 2),
+        { encoding: "utf8" }
+      );
+
+      // Parse and validate pose data
+      const poseData: PoseJsonData = results;
       const validation = validatePoseDataQuality(poseData);
+
       if (!validation.valid) {
-        setGaitError(validation.message || 'Invalid pose data');
-        setAnalyzingGait(false);
-        return;
+        throw new Error(
+          validation.message ||
+            `Insufficient valid frames: ${validation.validFrameCount}/60 required`
+        );
       }
 
       // Run gait analysis
-      const analysis = await analyzeGait(poseData);
-      setGaitAnalysis(analysis);
+      setProgress({ stage: "analyzing" });
+      const gaitResult = await analyzeGait(poseData);
+
+      console.log("Gait analysis complete:", gaitResult);
+      setResult(gaitResult);
+      setError(null);
+      setAnalyzing(false);
+      setProgress({ stage: "complete" });
     } catch (err: any) {
-      setGaitError(err.message || 'Failed to analyze gait');
-    } finally {
-      setAnalyzingGait(false);
+      console.error("Pose extraction completion error:", err);
+      const errorMsg = err?.message || err?.toString() || "Analysis failed";
+      setError(errorMsg);
+      setAnalyzing(false);
+      setProgress({ stage: "idle" });
+    }
+  };
+
+  // Main analysis function
+  const handleAnalyzeGait = async () => {
+    if (!videoUri || !fileName) {
+      setError("Please select a video first");
+      return;
+    }
+
+    if (!webViewReady) {
+      setError("Pose detection engine is still initializing. Please wait...");
+      return;
+    }
+
+    // Reset state
+    setResult(null);
+    setError(null);
+    setAnalyzing(true);
+    setProgress({ stage: "preparing" });
+
+    try {
+      // Validate video
+      const validation = await validateVideo(videoUri, fileName);
+      if (!validation.valid) {
+        throw new Error(validation.error);
+      }
+
+      if (validation.warnings && validation.warnings.length > 0) {
+        Alert.alert("Note", validation.warnings.join("\n"));
+      }
+
+      // Read video as base64 and send to WebView
+      setProgress({ stage: "loading" });
+      
+      // Determine MIME type from file extension
+      const extension = fileName.toLowerCase().split('.').pop();
+      let mimeType = 'video/mp4'; // default
+      if (extension === 'mov') mimeType = 'video/quicktime';
+      else if (extension === 'avi') mimeType = 'video/x-msvideo';
+
+      console.log(`Video format: ${extension}, MIME type: ${mimeType}`);
+
+      // Read video as base64
+      const base64 = await FileSystem.readAsStringAsync(videoUri, {
+        encoding: "base64",
+      });
+      
+      console.log(`Video size: ${(base64.length / 1024).toFixed(0)} KB (base64)`);
+
+      setProgress({ stage: "extracting" });
+      console.log("Sending video to WebView for processing...");
+      
+      webViewRef.current?.postMessage(
+        JSON.stringify({
+          type: "process_video",
+          video: `data:${mimeType};base64,${base64}`,
+          mimeType: mimeType,
+          options: {
+            minDetectionConfidence: 0.5,
+            minTrackingConfidence: 0.4,
+            fps: 30,
+          },
+        })
+      );
+      console.log("Video sent to WebView");
+    } catch (err: any) {
+      console.error("Video processing error:", err);
+      const errorMsg = err?.message || err?.toString() || "Failed to process video";
+      setError(errorMsg);
+      setAnalyzing(false);
+      setProgress({ stage: "idle" });
+    }
+  };
+
+  // Render progress message
+  const getProgressMessage = () => {
+    switch (progress.stage) {
+      case "preparing":
+        return "Preparing video...";
+      case "loading":
+        return "Loading video...";
+      case "extracting":
+        const frame = progress.frameIndex || 0;
+        const percent = progress.percent ? Math.round(progress.percent) : 0;
+        return `Extracting keypoints: frame ${frame} (${percent}%)`;
+      case "validating":
+        return "Validating pose data...";
+      case "analyzing":
+        return "Analyzing gait pattern...";
+      case "complete":
+        return "Analysis complete!";
+      default:
+        return "Processing...";
     }
   };
 
   return (
-    <ScrollView style={styles.scrollContainer}>
-      <View style={styles.container}>
-        <View style={styles.videoContainer}>
+    <ScrollView style={styles.container}>
+      <View style={styles.content}>
+        {/* Header */}
+        <View style={styles.header}>
+          <Text style={styles.title}>Gait Analysis</Text>
+          <Text style={styles.subtitle}>
+            Upload a video and analyze walking pattern
+          </Text>
+        </View>
+
+        {/* Step 1: Upload Video */}
+        <View style={styles.card}>
           <Text style={styles.stepTitle}>Step 1: Upload Video</Text>
           <VideoPicker onPress={pickVideo} />
           <VideoPreview uri={videoUri} fileName={fileName} player={player} />
+
+          {videoUri && (
+            <View style={styles.requirements}>
+              <Text style={styles.requirementsTitle}>Video Requirements:</Text>
+              <Text style={styles.requirementsText}>
+                {getVideoRequirements()}
+              </Text>
+            </View>
+          )}
         </View>
 
-        <UserInfo />
+        {/* Step 2: Analyze Gait */}
+        <View style={styles.card}>
+          <Text style={styles.stepTitle}>Step 2: Analyze Gait</Text>
 
-        {/* WebView preview (debug) */}
-        {htmlContent ? (
-          <View style={{ width: '100%', maxWidth: 600, marginTop: 12 }}>
-            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
-              <Text style={{ fontWeight: '600' }}>Pose preview (debug)</Text>
-              <Button
-                title={showPreview ? 'Hide' : 'Show'}
-                onPress={() => setShowPreview(v => !v)}
-              />
-            </View>
-            <WebView
-              ref={webViewRef}
-              source={{ html: htmlContent }}
-              style={{ 
-                width: showPreview ? Math.min(width - 64, 600) : 0, 
-                height: showPreview ? 320 : 0, 
-                opacity: 1,
-                marginTop: 8,
-                borderColor: '#ddd',
-                borderWidth: showPreview ? 1 : 0,
-                borderRadius: 8,
-                overflow: 'hidden'
-              }}
-              onMessage={onMessage}
-              javaScriptEnabled={true}
-              allowsInlineMediaPlayback={true}
-              mediaPlaybackRequiresUserAction={false}
-              originWhitelist={['*']}
-              // Android: allow file access just in case the internal page tries to reference local files
-              allowFileAccess={true}
-              allowUniversalAccessFromFileURLs={true}
-            />
-          </View>
-        ) : null}
-
-        {/* Step 2: Extract Keypoints */}
-        <View style={styles.extractionContainer}>
-          <Text style={styles.stepTitle}>Step 2: Extract Keypoints</Text>
-          <Button 
-            title="Analyze Video" 
-            onPress={onExtractKeypoints} 
-            disabled={!videoUri || running || !webViewReady} 
+          <Button
+            title="Analyze Gait Pattern"
+            onPress={handleAnalyzeGait}
+            disabled={!videoUri || analyzing || !webViewReady}
           />
-          {!webViewReady && (
-            <Text style={{ marginTop: 8, color: '#666' }}>Initializing pose engine…</Text>
+
+          {!webViewReady && htmlContent && (
+            <Text style={styles.initMessage}>
+              Initializing pose detection engine...
+            </Text>
           )}
 
-          {(() => {
-            if (!running) return null;
-            let progressText = 'Processing...';
-            if (progress && typeof progress.frameIndex === 'number') {
-              progressText = progressText + ' ' + progress.frameIndex + ' frames';
-            }
-            if (progress && typeof progress.percent === 'number') {
-              progressText = progressText + ' (' + Math.round(progress.percent) + '%)';
-            }
-            return (
-              <View style={styles.progress}>
-                <ActivityIndicator size="large" />
-                <Text style={styles.progressText}>{progressText}</Text>
-              </View>
-            );
-          })()}
-
-          {result && (
-            <View style={styles.result}>
-              <Text style={styles.resultText}>✓ Analysis Complete!</Text>
-              <Text>Frames processed: {result.frameCount}</Text>
-              <Text>Video size: {result.width}x{result.height}</Text>
-              <Text style={styles.outputPath}>Output: {result.outputFile}</Text>
-              <View style={{ marginTop: 12 }}>
-                <Button title="Export JSON to Downloads" onPress={onExportJson} />
-              </View>
+          {analyzing && (
+            <View style={styles.progressContainer}>
+              <ActivityIndicator size="large" color="#007AFF" />
+              <Text style={styles.progressText}>{getProgressMessage()}</Text>
             </View>
           )}
 
           {error && (
-            <View style={styles.error}>
-              <Text style={styles.errorText}>Error: {error}</Text>
+            <View style={styles.errorContainer}>
+              <Text style={styles.errorTitle}>⚠️ Analysis Failed</Text>
+              <Text style={styles.errorText}>{error}</Text>
             </View>
           )}
         </View>
 
-          {/* Step 3: BiLSTM Gait Analysis */}
-          <View style={styles.extractionContainer}>
-            <Text style={styles.stepTitle}>Step 3: Gait Analysis (BiLSTM)</Text>
-            <Button 
-              title="Analyze Gait Pattern" 
-              onPress={onAnalyzeGait} 
-              disabled={!result || analyzingGait} 
-            />
+        {/* Step 3: Results */}
+        {result && (
+          <View style={styles.card}>
+            <Text style={styles.stepTitle}>Results</Text>
 
-            {analyzingGait && (
-              <View style={styles.progress}>
-                <ActivityIndicator size="large" />
-                <Text style={styles.progressText}>Analyzing gait pattern...</Text>
-              </View>
-            )}
+            <View
+              style={[
+                styles.resultCard,
+                result.isAbnormal ? styles.abnormalCard : styles.normalCard,
+              ]}
+            >
+              <Text
+                style={[
+                  styles.resultTitle,
+                  result.isAbnormal ? styles.abnormalTitle : styles.normalTitle,
+                ]}
+              >
+                {result.isAbnormal
+                  ? "⚠️ Abnormal Gait Detected"
+                  : "✓ Normal Gait Pattern"}
+              </Text>
 
-            {gaitAnalysis && (
-              <View style={[styles.result, gaitAnalysis.isAbnormal ? styles.abnormalResult : styles.normalResult]}>
-                <Text style={[styles.resultText, gaitAnalysis.isAbnormal ? styles.abnormalText : styles.normalText]}>
-                  {gaitAnalysis.isAbnormal ? '⚠️ Abnormal Gait Detected' : '✓ Normal Gait Pattern'}
-                </Text>
-                <View style={styles.gaitDetails}>
-                  <Text style={styles.detailLabel}>Classification:</Text>
-                  <Text style={styles.detailValue}>{gaitAnalysis.classification}</Text>
-                  
-                  <Text style={styles.detailLabel}>Abnormality Score:</Text>
-                  <Text style={styles.detailValue}>{gaitAnalysis.abnormalityScore.toFixed(4)}</Text>
-                  
-                  <Text style={styles.detailLabel}>Confidence:</Text>
-                  <Text style={styles.detailValue}>{(gaitAnalysis.confidence * 100).toFixed(1)}%</Text>
-                  
-                  <View style={styles.featuresSeparator} />
-                  <Text style={styles.featuresTitle}>Gait Features:</Text>
-                  
-                  <Text style={styles.featureLabel}>Stride Variability:</Text>
-                  <Text style={styles.featureValue}>{gaitAnalysis.features.strideVariability.toFixed(3)}</Text>
-                  
-                  <Text style={styles.featureLabel}>Left-Right Asymmetry:</Text>
-                  <Text style={styles.featureValue}>{gaitAnalysis.features.leftRightAsymmetry.toFixed(3)}</Text>
-                  
-                  <Text style={styles.featureLabel}>Vertical Movement:</Text>
-                  <Text style={styles.featureValue}>{gaitAnalysis.features.verticalMovement.toFixed(3)}</Text>
-                  
-                  <Text style={styles.featureLabel}>Velocity Consistency:</Text>
-                  <Text style={styles.featureValue}>{gaitAnalysis.features.velocityConsistency.toFixed(3)}</Text>
+              <View style={styles.resultDetails}>
+                <View style={styles.resultRow}>
+                  <Text style={styles.resultLabel}>Classification:</Text>
+                  <Text style={styles.resultValue}>
+                    {result.classification}
+                  </Text>
+                </View>
+
+                <View style={styles.resultRow}>
+                  <Text style={styles.resultLabel}>Confidence:</Text>
+                  <Text style={styles.resultValue}>
+                    {(result.confidence * 100).toFixed(1)}%
+                  </Text>
+                </View>
+
+                <View style={styles.resultRow}>
+                  <Text style={styles.resultLabel}>Mean MSE:</Text>
+                  <Text style={styles.resultValue}>
+                    {result.abnormalityScore.toFixed(6)}
+                  </Text>
+                </View>
+
+                <View style={styles.resultRow}>
+                  <Text style={styles.resultLabel}>Threshold:</Text>
+                  <Text style={styles.resultValue}>0.174969</Text>
                 </View>
               </View>
-            )}
 
-            {gaitError && (
-              <View style={styles.error}>
-                <Text style={styles.errorText}>Error: {gaitError}</Text>
+              <View style={styles.featuresDivider} />
+
+              <Text style={styles.featuresTitle}>Analysis Details:</Text>
+              <View style={styles.featuresList}>
+                <Text style={styles.featureItem}>
+                  • Windows Analyzed: {result.details.numWindows}
+                </Text>
+                <Text style={styles.featureItem}>
+                  • Normal Windows: {result.details.normalWindowCount}
+                </Text>
+                <Text style={styles.featureItem}>
+                  • Abnormal Windows: {result.details.abnormalWindowCount} (
+                  {result.details.abnormalPercentage.toFixed(1)}%)
+                </Text>
+                <Text style={styles.featureItem}>
+                  • MSE Range: {result.details.minError.toFixed(6)} -{" "}
+                  {result.details.maxError.toFixed(6)}
+                </Text>
               </View>
-            )}
-          </View>
-
-          {/* Step 4: Generate SEI */}
-          <View style={styles.extractionContainer}>
-            <Text style={styles.stepTitle}>Step 4: Generate SEI</Text>
-            <Button title="Generate SEI" onPress={onGenerateSei} disabled={!result || generating} />
-
-            {generating && (
-              <View style={styles.progress}>
-                <ActivityIndicator size="large" />
-                <Text style={styles.progressText}>Generating SEI…</Text>
-              </View>
-            )}
-
-            {seiPng ? (
-              <View style={{ marginTop: 12, alignItems: 'center' }}>
-                <Text style={{ fontWeight: '600' }}>SEI Preview</Text>
-                <Image
-                  source={{ uri: 'data:image/png;base64,' + seiPng }}
-                  style={{ width: 224, height: 224, marginTop: 8, borderWidth: 1, borderColor: '#ddd' }}
-                />
-              </View>
-            ) : null}
-
-            {seiSavedPath && (
-              <Text style={{ marginTop: 8 }}>Saved: {seiSavedPath}</Text>
-            )}
-
-            <View style={{ marginTop: 12 }}>
-              <Button title="Export SEI to Downloads" onPress={onExportSei} disabled={!seiSavedPath} />
             </View>
           </View>
+        )}
+
+        {/* Hidden WebView for MediaPipe */}
+        {htmlContent && (
+          <WebView
+            ref={webViewRef}
+            source={{ html: htmlContent }}
+            style={{ width: 0, height: 0, opacity: 0 }}
+            onMessage={onWebViewMessage}
+            javaScriptEnabled={true}
+            allowsInlineMediaPlayback={true}
+            mediaPlaybackRequiresUserAction={false}
+            originWhitelist={["*"]}
+            allowFileAccess={true}
+            allowFileAccessFromFileURLs={true}
+            allowUniversalAccessFromFileURLs={true}
+            mixedContentMode="always"
+          />
+        )}
       </View>
     </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
-  scrollContainer: {
-    flex: 1,
-  },
   container: {
-    padding: 32,
-    alignItems: 'center',
+    flex: 1,
+    backgroundColor: "#f5f5f5",
+  },
+  content: {
+    padding: 20,
+    maxWidth: 800,
+    alignSelf: "center",
+    width: "100%",
+  },
+  header: {
+    marginBottom: 24,
+  },
+  title: {
+    fontSize: 32,
+    fontWeight: "bold",
+    color: "#000",
+    marginBottom: 8,
+  },
+  subtitle: {
+    fontSize: 16,
+    color: "#666",
+  },
+  card: {
+    backgroundColor: "#fff",
+    borderRadius: 12,
+    padding: 20,
+    marginBottom: 16,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
   },
   stepTitle: {
-    fontSize: 24,
-    fontWeight: 'bold',
+    fontSize: 20,
+    fontWeight: "600",
     marginBottom: 16,
+    color: "#000",
   },
-  videoContainer: {
-    width: '100%',
-    alignSelf: 'center',
-    alignItems: 'center',
-    marginTop: 20,
-    maxWidth: 600,
-    backgroundColor: '#fff',
-    padding: 20,
-    borderRadius: 8,
-  },
-  extractionContainer: {
-    width: '100%',
-    maxWidth: 600,
-    backgroundColor: '#fff',
-    padding: 20,
-    borderRadius: 8,
-    marginTop: 20,
-    alignItems: 'center',
-  },
-  progress: {
+  requirements: {
     marginTop: 16,
-    alignItems: 'center',
+    padding: 12,
+    backgroundColor: "#f0f8ff",
+    borderRadius: 8,
+    borderLeftWidth: 4,
+    borderLeftColor: "#007AFF",
+  },
+  requirementsTitle: {
+    fontSize: 14,
+    fontWeight: "600",
+    marginBottom: 8,
+    color: "#007AFF",
+  },
+  requirementsText: {
+    fontSize: 12,
+    color: "#333",
+    lineHeight: 18,
+  },
+  initMessage: {
+    marginTop: 12,
+    fontSize: 14,
+    color: "#666",
+    textAlign: "center",
+  },
+  progressContainer: {
+    marginTop: 20,
+    alignItems: "center",
   },
   progressText: {
-    marginTop: 8,
+    marginTop: 12,
     fontSize: 14,
-    color: '#666',
+    color: "#666",
   },
-  result: {
+  errorContainer: {
     marginTop: 16,
     padding: 16,
-    backgroundColor: '#e8f5e9',
+    backgroundColor: "#ffebee",
     borderRadius: 8,
-    width: '100%',
+    borderLeftWidth: 4,
+    borderLeftColor: "#f44336",
   },
-  resultText: {
+  errorTitle: {
     fontSize: 16,
-    fontWeight: 'bold',
-    color: '#2e7d32',
+    fontWeight: "600",
+    color: "#c62828",
     marginBottom: 8,
-  },
-  outputPath: {
-    fontSize: 12,
-    color: '#666',
-    marginTop: 4,
-  },
-  error: {
-    marginTop: 16,
-    padding: 16,
-    backgroundColor: '#ffebee',
-    borderRadius: 8,
-    width: '100%',
   },
   errorText: {
-    color: '#c62828',
     fontSize: 14,
+    color: "#c62828",
+    lineHeight: 20,
   },
-  normalResult: {
-    backgroundColor: '#e8f5e9',
+  resultCard: {
+    padding: 20,
+    borderRadius: 12,
+    borderWidth: 2,
   },
-  abnormalResult: {
-    backgroundColor: '#fff3e0',
+  normalCard: {
+    backgroundColor: "#e8f5e9",
+    borderColor: "#4caf50",
   },
-  normalText: {
-    color: '#2e7d32',
+  abnormalCard: {
+    backgroundColor: "#fff3e0",
+    borderColor: "#ff9800",
   },
-  abnormalText: {
-    color: '#e65100',
+  resultTitle: {
+    fontSize: 20,
+    fontWeight: "bold",
+    marginBottom: 16,
   },
-  gaitDetails: {
-    marginTop: 12,
+  normalTitle: {
+    color: "#2e7d32",
   },
-  detailLabel: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: '#555',
-    marginTop: 8,
+  abnormalTitle: {
+    color: "#e65100",
   },
-  detailValue: {
+  resultDetails: {
+    marginBottom: 16,
+  },
+  resultRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    marginBottom: 12,
+  },
+  resultLabel: {
     fontSize: 15,
-    fontWeight: 'bold',
-    color: '#000',
-    marginTop: 2,
+    color: "#555",
+    fontWeight: "500",
   },
-  featuresSeparator: {
+  resultValue: {
+    fontSize: 15,
+    color: "#000",
+    fontWeight: "600",
+  },
+  featuresDivider: {
     height: 1,
-    backgroundColor: '#ddd',
-    marginVertical: 12,
+    backgroundColor: "#ddd",
+    marginVertical: 16,
   },
   featuresTitle: {
+    fontSize: 16,
+    fontWeight: "600",
+    marginBottom: 12,
+    color: "#333",
+  },
+  featuresList: {
+    paddingLeft: 8,
+  },
+  featureItem: {
     fontSize: 14,
-    fontWeight: 'bold',
-    color: '#333',
+    color: "#666",
     marginBottom: 8,
-  },
-  featureLabel: {
-    fontSize: 12,
-    color: '#666',
-    marginTop: 6,
-  },
-  featureValue: {
-    fontSize: 13,
-    color: '#000',
-    marginTop: 2,
-    marginLeft: 12,
+    lineHeight: 20,
   },
 });

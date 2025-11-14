@@ -3,13 +3,13 @@
  * Combines video processing, keypoint extraction, and gait analysis
  */
 
-import * as FileSystem from 'expo-file-system/legacy';
-import { analyzeGait, GaitAnalysisResult } from './gaitAnalysis';
-import { validatePoseDataQuality, PoseJsonData } from './landmarkExtractor';
-import { VIDEO_ERRORS } from './videoValidation';
+import * as FileSystem from "expo-file-system/legacy";
+import { analyzeGait, GaitAnalysisResult } from "./gaitAnalysis";
+import { PoseJsonData, validatePoseDataQuality } from "./landmarkExtractor";
+import { VIDEO_ERRORS } from "./videoValidation";
 
 export interface AnalysisProgress {
-  stage: 'extracting' | 'analyzing' | 'complete';
+  stage: "extracting" | "analyzing" | "complete";
   frameIndex?: number;
   percent?: number;
   message: string;
@@ -41,8 +41,8 @@ export async function runGaitAnalysisPipeline(
   try {
     // Stage 1: Extract keypoints
     onProgress({
-      stage: 'extracting',
-      message: 'Extracting pose keypoints from video...',
+      stage: "extracting",
+      message: "Extracting pose keypoints from video...",
     });
 
     const poseResult = await extractKeypointsFromVideo(
@@ -51,7 +51,7 @@ export async function runGaitAnalysisPipeline(
       webViewRef,
       (frameIndex, percent) => {
         onProgress({
-          stage: 'extracting',
+          stage: "extracting",
           frameIndex,
           percent,
           message: `Processing frame ${frameIndex}...`,
@@ -62,22 +62,21 @@ export async function runGaitAnalysisPipeline(
     if (!poseResult.success || !poseResult.outputFile) {
       return {
         success: false,
-        error: poseResult.error || 'Failed to extract keypoints',
+        error: poseResult.error || "Failed to extract keypoints",
       };
     }
 
     // Stage 2: Validate pose data
-    const poseJson = await FileSystem.readAsStringAsync(
-      poseResult.outputFile,
-      { encoding: 'utf8' }
-    );
+    const poseJson = await FileSystem.readAsStringAsync(poseResult.outputFile, {
+      encoding: "utf8",
+    });
     const poseData: PoseJsonData = JSON.parse(poseJson);
 
     const validation = validatePoseDataQuality(poseData);
     if (!validation.valid) {
       // Provide user-friendly error messages
-      let errorMessage = validation.message || 'Invalid pose data';
-      
+      let errorMessage = validation.message || "Invalid pose data";
+
       if (validation.validFrameCount !== undefined) {
         if (validation.validFrameCount === 0) {
           errorMessage = VIDEO_ERRORS.NO_PERSON;
@@ -99,15 +98,15 @@ export async function runGaitAnalysisPipeline(
 
     // Stage 3: Analyze gait
     onProgress({
-      stage: 'analyzing',
-      message: 'Analyzing gait pattern...',
+      stage: "analyzing",
+      message: "Analyzing gait pattern...",
     });
 
     const gaitAnalysis = await analyzeGait(poseData);
 
     onProgress({
-      stage: 'complete',
-      message: 'Analysis complete',
+      stage: "complete",
+      message: "Analysis complete",
     });
 
     return {
@@ -122,7 +121,7 @@ export async function runGaitAnalysisPipeline(
   } catch (error: any) {
     return {
       success: false,
-      error: error.message || 'Analysis failed',
+      error: error.message || "Analysis failed",
     };
   }
 }
@@ -140,7 +139,7 @@ function extractKeypointsFromVideo(
     try {
       // Read video as base64
       const base64 = await FileSystem.readAsStringAsync(videoUri, {
-        encoding: 'base64',
+        encoding: "base64",
       });
 
       // Set up message handler
@@ -149,21 +148,21 @@ function extractKeypointsFromVideo(
           const message = JSON.parse(event.nativeEvent.data);
 
           switch (message.type) {
-            case 'progress':
+            case "progress":
               onProgress(message.frameIndex, message.percent);
               break;
 
-            case 'complete':
+            case "complete":
               if (!message.results) {
                 resolve({
                   success: false,
-                  error: 'No results returned from pose detection',
+                  error: "No results returned from pose detection",
                 });
                 return;
               }
 
               // Save results to file
-              const baseName = fileName?.split('.')[0] || 'video';
+              const baseName = fileName?.split(".")[0] || "video";
               const posesDir = `${FileSystem.documentDirectory}poses`;
               const outputFile = `${posesDir}/${baseName}_pose.json`;
 
@@ -173,7 +172,7 @@ function extractKeypointsFromVideo(
               await FileSystem.writeAsStringAsync(
                 outputFile,
                 JSON.stringify(message.results, null, 2),
-                { encoding: 'utf8' }
+                { encoding: "utf8" }
               );
 
               resolve({
@@ -182,17 +181,17 @@ function extractKeypointsFromVideo(
               });
               break;
 
-            case 'error':
+            case "error":
               resolve({
                 success: false,
-                error: message.message || 'Pose detection failed',
+                error: message.message || "Pose detection failed",
               });
               break;
           }
         } catch (err: any) {
           resolve({
             success: false,
-            error: err.message || 'Failed to process results',
+            error: err.message || "Failed to process results",
           });
         }
       };
@@ -204,7 +203,7 @@ function extractKeypointsFromVideo(
       // Send video to WebView for processing
       webViewRef.current?.postMessage(
         JSON.stringify({
-          type: 'process_video',
+          type: "process_video",
           video: `data:video/mp4;base64,${base64}`,
           options: {
             minDetectionConfidence: 0.5,
@@ -216,7 +215,7 @@ function extractKeypointsFromVideo(
     } catch (error: any) {
       resolve({
         success: false,
-        error: error.message || 'Failed to read video',
+        error: error.message || "Failed to read video",
       });
     }
   });

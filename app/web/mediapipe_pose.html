@@ -89,12 +89,40 @@
                         // Prepare video element for autoplay policies
                         videoElement.muted = true;
                         videoElement.playsInline = true;
-                        videoElement.src = message.video;
+                        
+                        // Check if video is a file path or data URI
+                        const videoSrc = message.video;
+                        console.log('Setting video source:', videoSrc.substring(0, 100) + '...');
+                        
+                        // Set source with MIME type if provided
+                        if (message.mimeType) {
+                            videoElement.type = message.mimeType;
+                        }
+                        videoElement.src = videoSrc;
+                        
+                        console.log('Video source set, waiting for metadata...');
 
                         // Wait for metadata to load
                         await new Promise((resolve, reject) => {
-                            const onMeta = () => { cleanup(); resolve(); };
-                            const onErr = (e) => { cleanup(); reject(e); };
+                            const timeoutId = setTimeout(() => {
+                                cleanup();
+                                reject(new Error('Video metadata loading timeout (10s)'));
+                            }, 10000);
+                            
+                            const onMeta = () => { 
+                                clearTimeout(timeoutId);
+                                cleanup(); 
+                                console.log('Video metadata loaded successfully');
+                                console.log(`Video: ${videoElement.videoWidth}x${videoElement.videoHeight}, duration: ${videoElement.duration}s`);
+                                resolve(); 
+                            };
+                            const onErr = (e) => { 
+                                clearTimeout(timeoutId);
+                                cleanup(); 
+                                console.error('Video error event:', e);
+                                const errorMsg = 'Video failed to load. The video format may not be supported by the browser.';
+                                reject(new Error(errorMsg)); 
+                            };
                             const cleanup = () => {
                                 videoElement.removeEventListener('loadedmetadata', onMeta);
                                 videoElement.removeEventListener('error', onErr);
@@ -121,9 +149,11 @@
 
                         await processVideo(duration);
                     } catch (error) {
+                        console.error('Video processing error:', error);
+                        const errorMessage = error?.message || error?.toString() || 'Unknown video processing error';
                         window.ReactNativeWebView?.postMessage?.(JSON.stringify({
                             type: 'error',
-                            message: error?.message || String(error)
+                            message: errorMessage
                         }));
                     }
                 }
@@ -177,7 +207,11 @@
                 const t = Math.min(duration, i / targetFps);
                 await new Promise((resolve, reject) => {
                     const onSeeked = () => { cleanup(); resolve(); };
-                    const onErr = (e) => { cleanup(); reject(e); };
+                    const onErr = (e) => { 
+                        cleanup(); 
+                        const errorMsg = e?.message || e?.error?.message || 'Video seeking failed';
+                        reject(new Error(errorMsg)); 
+                    };
                     const cleanup = () => {
                         videoElement.removeEventListener('seeked', onSeeked);
                         videoElement.removeEventListener('error', onErr);

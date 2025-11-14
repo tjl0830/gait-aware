@@ -59,7 +59,7 @@ export function extractBiLSTMLandmarksFromFrame(
   landmarks: PoseLandmark[]
 ): number[] | null {
   if (!landmarks || landmarks.length < 33) {
-    console.warn('Invalid landmarks array - expected 33 landmarks');
+    console.warn("Invalid landmarks array - expected 33 landmarks");
     return null;
   }
 
@@ -90,12 +90,12 @@ export function extractBiLSTMSequence(
   targetFrames: number = 60
 ): number[][] | null {
   if (!poseData || !poseData.frames || poseData.frames.length === 0) {
-    console.error('Invalid pose data');
+    console.error("Invalid pose data");
     return null;
   }
 
   const frames = poseData.frames;
-  
+
   // Extract landmarks from all valid frames
   const validFrames: number[][] = [];
   for (const frame of frames) {
@@ -106,7 +106,7 @@ export function extractBiLSTMSequence(
   }
 
   if (validFrames.length === 0) {
-    console.error('No valid frames found');
+    console.error("No valid frames found");
     return null;
   }
 
@@ -162,7 +162,10 @@ function sampleFrames(frames: number[][], targetCount: number): number[][] {
 /**
  * Interpolate frames to reach target count
  */
-function interpolateFrames(frames: number[][], targetCount: number): number[][] {
+function interpolateFrames(
+  frames: number[][],
+  targetCount: number
+): number[][] {
   if (frames.length === 0) return [];
   if (frames.length === 1) {
     // Repeat single frame
@@ -197,7 +200,7 @@ export function normalizeLandmarks(sequence: number[][]): number[][] {
   if (sequence.length === 0) return sequence;
 
   const numFeatures = sequence[0].length;
-  const normalized: number[][] = sequence.map(frame => [...frame]);
+  const normalized: number[][] = sequence.map((frame) => [...frame]);
 
   // Normalize each feature dimension
   for (let feature = 0; feature < numFeatures; feature++) {
@@ -232,11 +235,11 @@ export function validatePoseDataQuality(poseData: PoseJsonData): {
   validFrameCount?: number;
 } {
   if (!poseData || !poseData.frames) {
-    return { valid: false, message: 'Invalid pose data structure' };
+    return { valid: false, message: "Invalid pose data structure" };
   }
 
   if (poseData.frames.length === 0) {
-    return { valid: false, message: 'No frames found in pose data' };
+    return { valid: false, message: "No frames found in pose data" };
   }
 
   // Count frames with valid landmarks
