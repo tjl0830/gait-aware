@@ -579,8 +579,8 @@ function gaussianFilter1D(data: number[], sigma: number): number[] {
 export async function generateSeiFromPoseJson(jsonUri: string, outBaseName?: string, options?: { size?: number; connections?: number[][]; lineThickness?: number; jointRadius?: number; smoothSigma?: number; }) {
   // Follow Python blazepose_skeleton.py logic per-frame: draw smoothed skeletons scaled by vertical span and centered
   const size = options?.size ?? 224;
-  const lineThickness = options?.lineThickness ?? 4; // Increased from 3 for more brightness
-  const jointRadius = options?.jointRadius ?? 4; // Increased from 3 for more visibility
+  const lineThickness = options?.lineThickness ?? 6; // Increased from 3 for more brightness
+  const jointRadius = options?.jointRadius ?? 6; // Increased from 3 for more visibility
   const smoothSigma = options?.smoothSigma ?? 0.1;
 
   const poses = await loadPoseJson(jsonUri);

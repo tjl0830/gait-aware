@@ -1,6 +1,6 @@
 import { useVideoPlayer } from 'expo-video';
 import React, { useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, Alert, Button, Image, Platform, ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
+import { ActivityIndicator, Button, Image, ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import { WebView } from 'react-native-webview';
 // Use legacy API to avoid deprecation error in SDK 54
 import { Asset } from 'expo-asset';
@@ -8,17 +8,12 @@ import * as FileSystem from 'expo-file-system/legacy';
 import { VideoPicker } from '../../components/VideoPicker';
 import { VideoPreview } from '../../components/VideoPreview';
 import { useVideoPickerLogic } from '../../components/hooks/useVideoPickerLogic';
+import { exportJson, exportSei } from '../pipeline/exportPipeline';
+import { generateSei } from '../pipeline/seiPipeline';
+import { extractKeypoints, handleWebViewMessage } from '../pipeline/videoPipeline';
 import UserInfo from '../user_info';
-import { generateSeiFromPoseJson } from '../utils/seiUtils';
 
-type PoseResult = {
-  success: boolean;
-  outputFile: string;
-  frameCount: number;
-  width: number;
-  height: number;
-  fps: number;
-};
+import { PoseResult } from '../pipeline/pipelineTypes';
 
 export default function Tab() {
   const { videoUri, fileName, pickVideo } = useVideoPickerLogic();
@@ -63,225 +58,57 @@ export default function Tab() {
   }, []);
 
   // Handle messages from WebView
-  const onMessage = async (event: { nativeEvent: { data: string } }) => {
+  const onMessage = async (event: any) => {
+    handleWebViewMessage(event, fileName, setResult, setProgress, setError, setRunning);
     try {
       const message = JSON.parse(event.nativeEvent.data);
-      
-      switch (message.type) {
-        case 'status':
-          console.log('MediaPipe status:', message.message);
-          if (String(message.message).toLowerCase().includes('initialized')) {
-            setWebViewReady(true);
-          }
-          break;
-        
-        case 'progress':
-          setProgress({
-            frameIndex: message.frameIndex,
-            percent: message.percent
-          });
-          break;
-        
-        case 'complete':
-          try {
-            // Get base path for file storage (app's documents directory)
-            const baseName = fileName?.split('.')[0] || 'video';
-            const posesDir = `${FileSystem.documentDirectory}poses`;
-            const outputFile = `${posesDir}/${baseName}_pose.json`;
-
-            // Create directory structure
-            await FileSystem.makeDirectoryAsync(
-              posesDir,
-              { intermediates: true }
-            );
-            
-            await FileSystem.writeAsStringAsync(
-              outputFile,
-              JSON.stringify(message.results, null, 2),
-              { encoding: 'utf8' }
-            );
-            
-            setResult({
-              success: true,
-              outputFile,
-              frameCount: message.results.metadata.frame_count,
-              width: message.results.metadata.width,
-              height: message.results.metadata.height,
-              fps: message.results.metadata.fps
-            });
-            
-            console.log('Results saved to:', outputFile);
-          } catch (err: any) {
-            throw new Error('Failed to save results: ' + err.message);
-          } finally {
-            setRunning(false);
-          }
-          break;
-        
-        case 'error':
-          throw new Error(message.message);
+      if (message.type === 'status' && String(message.message).toLowerCase().includes('initialized')) {
+        setWebViewReady(true);
       }
-    } catch (err: any) {
-      setError(err.message);
-      setRunning(false);
-    }
+      if (message.type === 'complete' && message.results) {
+        const baseName = fileName?.split('.')[0] || 'video';
+        const posesDir = `${FileSystem.documentDirectory}poses`;
+        const outputFile = `${posesDir}/${baseName}_pose.json`;
+        await FileSystem.makeDirectoryAsync(posesDir, { intermediates: true });
+        await FileSystem.writeAsStringAsync(outputFile, JSON.stringify(message.results, null, 2), { encoding: 'utf8' });
+        setResult({
+          success: true,
+          outputFile,
+          frameCount: message.results.metadata.frame_count,
+          width: message.results.metadata.width,
+          height: message.results.metadata.height,
+          fps: message.results.metadata.fps
+        });
+      }
+    } catch (err) {}
   };
 
-  // Extract keypoints from video
-  async function onExtractKeypoints() {
-    setError(null);
-    if (!videoUri) {
-      setError('No video selected');
-      return;
-    }
-    if (!webViewReady) {
-      setError('Pose engine is still initializing. Please wait a moment and try again.');
-      return;
-    }
-
-    try {
-      setRunning(true);
-      setResult(null);
-      setProgress(null);
-
-      // Read video file as base64
-      const base64 = await FileSystem.readAsStringAsync(videoUri, {
-        encoding: 'base64'
-      });
-
-      // Send to WebView for processing
-      webViewRef.current?.postMessage(JSON.stringify({
-        type: 'process_video',
-        video: `data:video/mp4;base64,${base64}`,
-        options: {
-          minDetectionConfidence: 0.5,
-          minTrackingConfidence: 0.5,
-          fps: 30
-        }
-      }));
-    } catch (err: any) {
-      setError(err.message);
-      setRunning(false);
-    }
-  }
-
-  // Generate SEI (simple averaged joints -> PNG)
-  const onGenerateSei = async () => {
-    try {
-      setError(null);
-      setGenerating(true);
-      setSeiPng(null);
-      setSeiSavedPath(null);
-
-      if (!result?.outputFile) {
-        Alert.alert('No JSON', 'Run analysis first to generate keypoints JSON.');
-        setGenerating(false);
-        return;
-      }
-
-      // BlazePose connections (common links between landmarks)
-      const BLAZEPOSE_CONNECTIONS = [
-        [11, 12], // shoulders
-        [11, 13], [13, 15], // left arm
-        [12, 14], [14, 16], // right arm
-        [11, 23], [12, 24], // shoulders to hips
-        [23, 24], // hips
-        [23, 25], [25, 27], [27, 31], // left leg
-        [24, 26], [26, 28], [28, 32], // right leg
-        [0, 2], [0, 5] // nose to eyes
-      ];
-
-      const baseName = (fileName?.split('.')[0]) || 'video';
-      // Use default parameters (lineThickness=4, jointRadius=4) for brighter, more visible SEI
-      const { png, path } = await generateSeiFromPoseJson(result.outputFile, baseName, { size: 224 });
-
-      setSeiPng(png);
-      setSeiSavedPath(path);
-      setGenerating(false);
-    } catch (e: any) {
-      setGenerating(false);
-      setError(e?.message || String(e));
-    }
+  // Pipeline function wrappers
+  const onExtractKeypoints = () => {
+    if (!videoUri) return;
+    extractKeypoints(
+      String(videoUri),
+      webViewReady,
+      webViewRef,
+      setRunning,
+      setResult,
+      setProgress,
+      setError,
+      fileName || ''
+    );
   };
 
-  // Export SEI file to Downloads using SAF (Android)
-  const onExportSei = async () => {
-    try {
-      if (!seiSavedPath) {
-        Alert.alert('No file', 'Generate the SEI first.');
-        return;
-      }
+  const onGenerateSei = () => generateSei(
+    result,
+    fileName,
+    setSeiPng,
+    setSeiSavedPath,
+    setGenerating,
+    setError
+  );
+  const onExportSei = () => exportSei(seiSavedPath, fileName);
 
-      const baseName = fileName?.split('.')[0] || 'video';
-      if (Platform.OS === 'android') {
-        const SAF = (FileSystem as any).StorageAccessFramework;
-        if (!SAF?.requestDirectoryPermissionsAsync) {
-          Alert.alert('Not supported', 'Storage Access Framework is not available.');
-          return;
-        }
-
-        const perms = await SAF.requestDirectoryPermissionsAsync();
-        if (!perms.granted) {
-          Alert.alert('Permission denied', 'Export cancelled.');
-          return;
-        }
-
-        const filename = `${baseName}_sei.png`;
-        const destUri = await SAF.createFileAsync(perms.directoryUri, filename, 'image/png');
-        // Read the PNG file as base64 and write to the destination
-        const content = await FileSystem.readAsStringAsync(seiSavedPath, { encoding: FileSystem.EncodingType.Base64 });
-        await FileSystem.writeAsStringAsync(destUri, content, { encoding: FileSystem.EncodingType.Base64 });
-        Alert.alert('Exported', 'SEI PNG saved to the selected folder.');
-      } else {
-        Alert.alert('Saved', `App file path:
-${seiSavedPath}`);
-      }
-    } catch (e: any) {
-      console.error('Export failed:', e);
-      Alert.alert('Export failed', e?.message || String(e));
-    }
-  };
-
-  // Export JSON to a user-selected folder (e.g., Downloads on Android) using SAF
-  const onExportJson = async () => {
-    try {
-      if (!result?.outputFile) {
-        Alert.alert('No file', 'Run analysis first to generate a JSON file.');
-        return;
-      }
-      const baseName = fileName?.split('.')[0] || 'video';
-
-      if (Platform.OS === 'android') {
-        const SAF = (FileSystem as any).StorageAccessFramework;
-        if (!SAF?.requestDirectoryPermissionsAsync) {
-          Alert.alert('Not supported', 'Storage Access Framework is not available.');
-          return;
-        }
-
-        // Ask user to pick a folder (recommend choosing Downloads)
-        const perms = await SAF.requestDirectoryPermissionsAsync();
-        if (!perms.granted) {
-          Alert.alert('Permission denied', 'Export cancelled.');
-          return;
-        }
-
-        const filename = `${baseName}_pose.json`;
-        const destUri = await SAF.createFileAsync(perms.directoryUri, filename, 'application/json');
-
-        // Read local file and write to the SAF content URI
-        const content = await FileSystem.readAsStringAsync(result.outputFile, { encoding: 'utf8' });
-        await FileSystem.writeAsStringAsync(destUri, content, { encoding: 'utf8' });
-
-        Alert.alert('Exported', 'JSON saved to the selected folder.');
-      } else {
-        // iOS or web: fall back to showing the path or future share integration
-        Alert.alert('Saved', `App file path:\n${result.outputFile}`);
-      }
-    } catch (e: any) {
-      console.error('Export failed:', e);
-      Alert.alert('Export failed', e?.message || String(e));
-    }
-  };
+  const onExportJson = () => exportJson(result, fileName);
 
   return (
     <ScrollView style={styles.scrollContainer}>
@@ -341,15 +168,22 @@ ${seiSavedPath}`);
             <Text style={{ marginTop: 8, color: '#666' }}>Initializing pose engine…</Text>
           )}
 
-          {running && (
-            <View style={styles.progress}>
-              <ActivityIndicator size="large" />
-              <Text style={styles.progressText}>
-                Processing... {progress ? `${progress.frameIndex} frames` : ''} 
-                {progress?.percent ? ` (${Math.round(progress.percent)}%)` : ''}
-              </Text>
-            </View>
-          )}
+          {(() => {
+            if (!running) return null;
+            let progressText = 'Processing...';
+            if (progress && typeof progress.frameIndex === 'number') {
+              progressText = progressText + ' ' + progress.frameIndex + ' frames';
+            }
+            if (progress && typeof progress.percent === 'number') {
+              progressText = progressText + ' (' + Math.round(progress.percent) + '%)';
+            }
+            return (
+              <View style={styles.progress}>
+                <ActivityIndicator size="large" />
+                <Text style={styles.progressText}>{progressText}</Text>
+              </View>
+            );
+          })()}
 
           {result && (
             <View style={styles.result}>
@@ -382,15 +216,15 @@ ${seiSavedPath}`);
               </View>
             )}
 
-            {seiPng && (
+            {seiPng ? (
               <View style={{ marginTop: 12, alignItems: 'center' }}>
                 <Text style={{ fontWeight: '600' }}>SEI Preview</Text>
                 <Image
-                  source={{ uri: `data:image/png;base64,${seiPng}` }}
+                  source={{ uri: 'data:image/png;base64,' + seiPng }}
                   style={{ width: 224, height: 224, marginTop: 8, borderWidth: 1, borderColor: '#ddd' }}
                 />
               </View>
-            )}
+            ) : null}
 
             {seiSavedPath && (
               <Text style={{ marginTop: 8 }}>Saved: {seiSavedPath}</Text>
