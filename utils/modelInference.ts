@@ -10,8 +10,8 @@
  */
 
 import * as tf from "@tensorflow/tfjs";
-import * as FileSystem from "expo-file-system/legacy";
 import { Asset } from "expo-asset";
+import * as FileSystem from "expo-file-system/legacy";
 
 // Model specifications (must match training)
 export const MODEL_SPECS = {
@@ -75,12 +75,9 @@ export async function loadModel(): Promise<tf.GraphModel | tf.LayersModel> {
     }
 
     // Read model file as base64
-    const modelData = await FileSystem.readAsStringAsync(
-      modelAsset.localUri,
-      {
-        encoding: FileSystem.EncodingType.Base64,
-      }
-    );
+    const modelData = await FileSystem.readAsStringAsync(modelAsset.localUri, {
+      encoding: FileSystem.EncodingType.Base64,
+    });
 
     // Convert base64 to ArrayBuffer
     const binaryString = atob(modelData);
@@ -120,9 +117,7 @@ export async function loadModel(): Promise<tf.GraphModel | tf.LayersModel> {
  * @param windows - Normalized windows [num_windows, 60, 16]
  * @returns Array of MSE values (one per window)
  */
-export async function runInference(
-  windows: number[][][]
-): Promise<number[]> {
+export async function runInference(windows: number[][][]): Promise<number[]> {
   if (!modelInstance) {
     throw new Error("Model not loaded. Call loadModel() first.");
   }

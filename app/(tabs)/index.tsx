@@ -1,12 +1,12 @@
 /**
- * Simplified Gait Analysis - Main Screen
- * Clean, focused UI: Upload Video → Analyze Gait → View Results
+ * Gait Analysis - Main Screen
+ * Using react-native-mediapipe for reliable offline pose detection
+ * Upload Video → Extract Pose (MediaPipe) → Analyze Gait (BiLSTM) → View Results
  */
 
-import { Asset } from "expo-asset";
 import * as FileSystem from "expo-file-system/legacy";
 import { useVideoPlayer } from "expo-video";
-import React, { useEffect, useRef, useState } from "react";
+import React, { useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -16,15 +16,12 @@ import {
   Text,
   View,
 } from "react-native";
-import { WebView } from "react-native-webview";
 import { VideoPicker } from "../../components/VideoPicker";
 import { VideoPreview } from "../../components/VideoPreview";
 import { useVideoPickerLogic } from "../../components/hooks/useVideoPickerLogic";
 import { analyzeGait, GaitAnalysisResult } from "../../utils/gaitAnalysis";
-import {
-  PoseJsonData,
-  validatePoseDataQuality,
-} from "../../utils/landmarkExtractor";
+import { validatePoseDataQuality } from "../../utils/landmarkExtractor";
+import { extractPoseFromVideo } from "../../utils/mediapipePoseExtractor";
 import {
   getVideoRequirements,
   validateVideo,
@@ -43,11 +40,6 @@ export default function GaitAnalysisScreen() {
   const [result, setResult] = useState<GaitAnalysisResult | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  // WebView for MediaPipe
-  const [htmlContent, setHtmlContent] = useState<string>("");
-  const webViewRef = useRef<WebView>(null);
-  const [webViewReady, setWebViewReady] = useState(false);
-
   // Video player
   const player = useVideoPlayer(videoUri, (player) => {
     if (player) {
@@ -57,128 +49,10 @@ export default function GaitAnalysisScreen() {
     }
   });
 
-  // Load MediaPipe HTML on mount
-  useEffect(() => {
-    async function loadHTML() {
-      try {
-        console.log("Loading MediaPipe HTML...");
-        // Use offline version (no CDN dependencies)
-        const moduleId = require("../web/mediapipe_pose_offline.html");
-        const asset = Asset.fromModule(moduleId);
-        await asset.downloadAsync();
-        if (!asset.localUri) throw new Error("HTML asset not available");
-        const content = await FileSystem.readAsStringAsync(asset.localUri);
-        console.log("MediaPipe HTML loaded successfully (offline mode)");
-        setHtmlContent(content);
-      } catch (err: any) {
-        console.error("Failed to load MediaPipe:", err);
-        setError("Failed to initialize pose detection engine");
-      }
-    }
-    loadHTML();
-  }, []);
-
-  // Handle messages from WebView
-  const onWebViewMessage = async (event: any) => {
-    try {
-      console.log("WebView message received:", event.nativeEvent.data);
-      const message = JSON.parse(event.nativeEvent.data);
-
-      switch (message.type) {
-        case "status":
-          console.log("WebView status:", message.message);
-          if (String(message.message).toLowerCase().includes("initialized")) {
-            setWebViewReady(true);
-            console.log("WebView ready!");
-          }
-          break;
-
-        case "progress":
-          setProgress({
-            stage: "extracting",
-            frameIndex: message.frameIndex,
-            percent: message.percent,
-          });
-          break;
-
-        case "complete":
-          console.log("Pose extraction complete");
-          await handlePoseExtractionComplete(message.results);
-          break;
-
-        case "error":
-          console.error("WebView error:", message.message);
-          setError(message.message || "Pose detection failed");
-          setAnalyzing(false);
-          break;
-      }
-    } catch (err: any) {
-      console.error("WebView message parsing error:", err);
-      const errorMsg = err?.message || String(err);
-      setError(`Message parsing failed: ${errorMsg}`);
-      setAnalyzing(false);
-    }
-  };
-
-  // Handle pose extraction completion
-  const handlePoseExtractionComplete = async (results: any) => {
-    try {
-      if (!results) {
-        throw new Error("No pose data returned");
-      }
-
-      setProgress({ stage: "validating" });
-
-      // Save pose data to file
-      const baseName = fileName?.split(".")[0] || "video";
-      const posesDir = `${FileSystem.documentDirectory}poses`;
-      const outputFile = `${posesDir}/${baseName}_pose.json`;
-
-      await FileSystem.makeDirectoryAsync(posesDir, { intermediates: true });
-      await FileSystem.writeAsStringAsync(
-        outputFile,
-        JSON.stringify(results, null, 2),
-        { encoding: "utf8" }
-      );
-
-      // Parse and validate pose data
-      const poseData: PoseJsonData = results;
-      const validation = validatePoseDataQuality(poseData);
-
-      if (!validation.valid) {
-        throw new Error(
-          validation.message ||
-            `Insufficient valid frames: ${validation.validFrameCount}/60 required`
-        );
-      }
-
-      // Run gait analysis
-      setProgress({ stage: "analyzing" });
-      const gaitResult = await analyzeGait(poseData);
-
-      console.log("Gait analysis complete:", gaitResult);
-      setResult(gaitResult);
-      setError(null);
-      setAnalyzing(false);
-      setProgress({ stage: "complete" });
-    } catch (err: any) {
-      console.error("Pose extraction completion error:", err);
-      const errorMsg = err?.message || err?.toString() || "Analysis failed";
-      setError(errorMsg);
-      setAnalyzing(false);
-      setProgress({ stage: "idle" });
-    }
-  };
-
   // Main analysis function
   const handleAnalyzeGait = async () => {
     if (!videoUri || !fileName) {
       setError("Please select a video first");
-      return;
-    }
-
-    if (!webViewReady) {
-      setError("Pose detection engine is still initializing. Please wait...");
       return;
     }
 
@@ -190,52 +64,68 @@ export default function GaitAnalysisScreen() {
 
     try {
       // Validate video
-      const validation = await validateVideo(videoUri, fileName);
-      if (!validation.valid) {
-        throw new Error(validation.error);
+      const videoValidation = await validateVideo(videoUri, fileName);
+      if (!videoValidation.valid) {
+        throw new Error(videoValidation.error);
       }
 
-      if (validation.warnings && validation.warnings.length > 0) {
-        Alert.alert("Note", validation.warnings.join("\n"));
+      if (videoValidation.warnings && videoValidation.warnings.length > 0) {
+        Alert.alert("Note", videoValidation.warnings.join("\n"));
       }
 
-      // Read video as base64 and send to WebView
-      setProgress({ stage: "loading" });
-      
-      // Determine MIME type from file extension
-      const extension = fileName.toLowerCase().split('.').pop();
-      let mimeType = 'video/mp4'; // default
-      if (extension === 'mov') mimeType = 'video/quicktime';
-      else if (extension === 'avi') mimeType = 'video/x-msvideo';
+      console.log("Starting pose extraction with react-native-mediapipe...");
+      setProgress({ stage: "extracting", percent: 0 });
 
-      console.log(`Video format: ${extension}, MIME type: ${mimeType}`);
-
-      // Read video as base64
-      const base64 = await FileSystem.readAsStringAsync(videoUri, {
-        encoding: "base64",
-      });
-      
-      console.log(`Video size: ${(base64.length / 1024).toFixed(0)} KB (base64)`);
-
-      setProgress({ stage: "extracting" });
-      console.log("Sending video to WebView for processing...");
-      
-      webViewRef.current?.postMessage(
-        JSON.stringify({
-          type: "process_video",
-          video: `data:${mimeType};base64,${base64}`,
-          mimeType: mimeType,
-          options: {
-            minDetectionConfidence: 0.5,
-            minTrackingConfidence: 0.4,
-            fps: 30,
-          },
-        })
+      // Extract pose using MediaPipe
+      const poseData = await extractPoseFromVideo(
+        videoUri,
+        (frameIndex: number, totalFrames: number) => {
+          const percent = Math.round((frameIndex / totalFrames) * 100);
+          setProgress({ stage: "extracting", frameIndex, percent });
+          console.log(
+            `Processing frame ${frameIndex}/${totalFrames} (${percent}%)`
+          );
+        }
       );
-      console.log("Video sent to WebView");
+
+      console.log(`Extracted ${poseData.frames.length} frames with pose data`);
+
+      // Save pose data
+      const baseName = fileName?.split(".")[0] || "video";
+      const posesDir = `${FileSystem.documentDirectory}poses`;
+      const outputFile = `${posesDir}/${baseName}_pose.json`;
+
+      await FileSystem.makeDirectoryAsync(posesDir, { intermediates: true });
+      await FileSystem.writeAsStringAsync(
+        outputFile,
+        JSON.stringify(poseData, null, 2),
+        { encoding: "utf8" }
+      );
+
+      // Validate pose data quality
+      setProgress({ stage: "validating" });
+      const poseValidation = validatePoseDataQuality(poseData);
+
+      if (!poseValidation.valid) {
+        throw new Error(
+          poseValidation.message ||
+            `Insufficient valid frames: ${poseValidation.validFrameCount}/60 required`
+        );
+      }
+
+      // Run gait analysis with BiLSTM
+      console.log("Running BiLSTM gait analysis...");
+      setProgress({ stage: "analyzing" });
+      const gaitResult = await analyzeGait(poseData);
+
+      console.log("Gait analysis complete:", gaitResult);
+      setResult(gaitResult);
+      setError(null);
+      setAnalyzing(false);
+      setProgress({ stage: "complete" });
     } catch (err: any) {
-      console.error("Video processing error:", err);
-      const errorMsg = err?.message || err?.toString() || "Failed to process video";
+      console.error("Analysis error:", err);
+      const errorMsg = err?.message || err?.toString() || "Analysis failed";
       setError(errorMsg);
       setAnalyzing(false);
       setProgress({ stage: "idle" });
@@ -247,8 +137,6 @@ export default function GaitAnalysisScreen() {
     switch (progress.stage) {
       case "preparing":
         return "Preparing video...";
-      case "loading":
-        return "Loading video...";
       case "extracting":
         const frame = progress.frameIndex || 0;
         const percent = progress.percent ? Math.round(progress.percent) : 0;
@@ -256,7 +144,7 @@ export default function GaitAnalysisScreen() {
       case "validating":
         return "Validating pose data...";
       case "analyzing":
-        return "Analyzing gait pattern...";
+        return "Analyzing gait pattern with BiLSTM...";
       case "complete":
         return "Analysis complete!";
       default:
@@ -298,14 +186,8 @@ export default function GaitAnalysisScreen() {
           <Button
             title="Analyze Gait Pattern"
             onPress={handleAnalyzeGait}
-            disabled={!videoUri || analyzing || !webViewReady}
+            disabled={!videoUri || analyzing}
           />
-
-          {!webViewReady && htmlContent && (
-            <Text style={styles.initMessage}>
-              Initializing pose detection engine...
-            </Text>
-          )}
 
           {analyzing && (
             <View style={styles.progressContainer}>
@@ -394,24 +276,6 @@ export default function GaitAnalysisScreen() {
             </View>
           </View>
         )}
-
-        {/* Hidden WebView for MediaPipe */}
-        {htmlContent && (
-          <WebView
-            ref={webViewRef}
-            source={{ html: htmlContent }}
-            style={{ width: 0, height: 0, opacity: 0 }}
-            onMessage={onWebViewMessage}
-            javaScriptEnabled={true}
-            allowsInlineMediaPlayback={true}
-            mediaPlaybackRequiresUserAction={false}
-            originWhitelist={["*"]}
-            allowFileAccess={true}
-            allowFileAccessFromFileURLs={true}
-            allowUniversalAccessFromFileURLs={true}
-            mixedContentMode="always"
-          />
-        )}
       </View>
     </ScrollView>
   );
@@ -476,12 +340,6 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: "#333",
     lineHeight: 18,
-  },
-  initMessage: {
-    marginTop: 12,
-    fontSize: 14,
-    color: "#666",
-    textAlign: "center",
   },
   progressContainer: {
     marginTop: 20,

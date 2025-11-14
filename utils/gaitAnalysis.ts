@@ -13,16 +13,16 @@
 
 import { PoseJsonData } from "./landmarkExtractor";
 import {
-  normalizeWithStats,
+  classifyFromErrors,
+  loadModel,
+  MODEL_SPECS,
+  runInference,
+} from "./modelInference";
+import {
   createSlidingWindows,
   NormalizationStats,
+  normalizeWithStats,
 } from "./normalization";
-import {
-  loadModel,
-  runInference,
-  classifyFromErrors,
-  MODEL_SPECS,
-} from "./modelInference";
 
 export interface GaitAnalysisResult {
   isAbnormal: boolean;
@@ -181,7 +181,9 @@ export async function analyzeGait(
     console.log("Normalizing features (per-video)...");
     const { normalized, stats } = normalizeWithStats(features);
     console.log("Normalization complete");
-    console.log(`Mean: [${stats.mean.slice(0, 4).map((v) => v.toFixed(4))}...]`);
+    console.log(
+      `Mean: [${stats.mean.slice(0, 4).map((v) => v.toFixed(4))}...]`
+    );
     console.log(`Std: [${stats.std.slice(0, 4).map((v) => v.toFixed(4))}...]`);
 
     // Step 3: Create 60-frame sliding windows with 50% overlap
@@ -201,17 +203,25 @@ export async function analyzeGait(
     // Step 5: Run inference
     console.log("Running inference...");
     const errors = await runInference(windows);
-    console.log(`Inference complete. MSE per window: [${errors.map((e) => e.toFixed(6)).join(", ")}]`);
+    console.log(
+      `Inference complete. MSE per window: [${errors
+        .map((e) => e.toFixed(6))
+        .join(", ")}]`
+    );
 
     // Step 6: Classify based on errors
     const classification = classifyFromErrors(errors);
-    console.log(`Classification: ${classification.isAbnormal ? "Abnormal" : "Normal"}`);
-    console.log(`Mean MSE: ${classification.meanError.toFixed(6)}, Threshold: ${MODEL_SPECS.threshold}`);
+    console.log(
+      `Classification: ${classification.isAbnormal ? "Abnormal" : "Normal"}`
+    );
+    console.log(
+      `Mean MSE: ${classification.meanError.toFixed(6)}, Threshold: ${
+        MODEL_SPECS.threshold
+      }`
+    );
 
     // Calculate confidence based on distance from threshold
-    const distance = Math.abs(
-      classification.meanError - MODEL_SPECS.threshold
-    );
+    const distance = Math.abs(classification.meanError - MODEL_SPECS.threshold);
     const confidence = Math.min(distance / MODEL_SPECS.threshold, 1.0);
 
     return {
