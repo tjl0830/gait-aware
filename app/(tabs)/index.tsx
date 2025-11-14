@@ -12,6 +12,8 @@ import { exportJson, exportSei } from '../pipeline/exportPipeline';
 import { generateSei } from '../pipeline/seiPipeline';
 import { extractKeypoints, handleWebViewMessage } from '../pipeline/videoPipeline';
 import UserInfo from '../user_info';
+import { analyzeGait, GaitAnalysisResult } from '../../utils/gaitAnalysis';
+import { validatePoseDataQuality, PoseJsonData } from '../../utils/landmarkExtractor';
 
 import { PoseResult } from '../pipeline/pipelineTypes';
 
@@ -24,6 +26,9 @@ export default function Tab() {
   const [seiPng, setSeiPng] = useState<string | null>(null);
   const [seiSavedPath, setSeiSavedPath] = useState<string | null>(null);
   const [generating, setGenerating] = useState(false);
+  const [gaitAnalysis, setGaitAnalysis] = useState<GaitAnalysisResult | null>(null);
+  const [analyzingGait, setAnalyzingGait] = useState(false);
+  const [gaitError, setGaitError] = useState<string | null>(null);
   const [htmlContent, setHtmlContent] = useState<string>('');
   const webViewRef = useRef<WebView>(null);
   const [webViewReady, setWebViewReady] = useState(false);
@@ -109,6 +114,39 @@ export default function Tab() {
   const onExportSei = () => exportSei(seiSavedPath, fileName);
 
   const onExportJson = () => exportJson(result, fileName);
+
+  const onAnalyzeGait = async () => {
+    if (!result?.outputFile) {
+      setGaitError('No pose data available. Please extract keypoints first.');
+      return;
+    }
+
+    setAnalyzingGait(true);
+    setGaitError(null);
+    setGaitAnalysis(null);
+
+    try {
+      // Read the pose JSON file
+      const poseJson = await FileSystem.readAsStringAsync(result.outputFile, { encoding: 'utf8' });
+      const poseData: PoseJsonData = JSON.parse(poseJson);
+
+      // Validate pose data quality
+      const validation = validatePoseDataQuality(poseData);
+      if (!validation.valid) {
+        setGaitError(validation.message || 'Invalid pose data');
+        setAnalyzingGait(false);
+        return;
+      }
+
+      // Run gait analysis
+      const analysis = await analyzeGait(poseData);
+      setGaitAnalysis(analysis);
+    } catch (err: any) {
+      setGaitError(err.message || 'Failed to analyze gait');
+    } finally {
+      setAnalyzingGait(false);
+    }
+  };
 
   return (
     <ScrollView style={styles.scrollContainer}>
@@ -204,9 +242,65 @@ export default function Tab() {
           )}
         </View>
 
-          {/* Step 3: Generate SEI */}
+          {/* Step 3: BiLSTM Gait Analysis */}
           <View style={styles.extractionContainer}>
-            <Text style={styles.stepTitle}>Step 3: Generate SEI</Text>
+            <Text style={styles.stepTitle}>Step 3: Gait Analysis (BiLSTM)</Text>
+            <Button 
+              title="Analyze Gait Pattern" 
+              onPress={onAnalyzeGait} 
+              disabled={!result || analyzingGait} 
+            />
+
+            {analyzingGait && (
+              <View style={styles.progress}>
+                <ActivityIndicator size="large" />
+                <Text style={styles.progressText}>Analyzing gait pattern...</Text>
+              </View>
+            )}
+
+            {gaitAnalysis && (
+              <View style={[styles.result, gaitAnalysis.isAbnormal ? styles.abnormalResult : styles.normalResult]}>
+                <Text style={[styles.resultText, gaitAnalysis.isAbnormal ? styles.abnormalText : styles.normalText]}>
+                  {gaitAnalysis.isAbnormal ? '⚠️ Abnormal Gait Detected' : '✓ Normal Gait Pattern'}
+                </Text>
+                <View style={styles.gaitDetails}>
+                  <Text style={styles.detailLabel}>Classification:</Text>
+                  <Text style={styles.detailValue}>{gaitAnalysis.classification}</Text>
+                  
+                  <Text style={styles.detailLabel}>Abnormality Score:</Text>
+                  <Text style={styles.detailValue}>{gaitAnalysis.abnormalityScore.toFixed(4)}</Text>
+                  
+                  <Text style={styles.detailLabel}>Confidence:</Text>
+                  <Text style={styles.detailValue}>{(gaitAnalysis.confidence * 100).toFixed(1)}%</Text>
+                  
+                  <View style={styles.featuresSeparator} />
+                  <Text style={styles.featuresTitle}>Gait Features:</Text>
+                  
+                  <Text style={styles.featureLabel}>Stride Variability:</Text>
+                  <Text style={styles.featureValue}>{gaitAnalysis.features.strideVariability.toFixed(3)}</Text>
+                  
+                  <Text style={styles.featureLabel}>Left-Right Asymmetry:</Text>
+                  <Text style={styles.featureValue}>{gaitAnalysis.features.leftRightAsymmetry.toFixed(3)}</Text>
+                  
+                  <Text style={styles.featureLabel}>Vertical Movement:</Text>
+                  <Text style={styles.featureValue}>{gaitAnalysis.features.verticalMovement.toFixed(3)}</Text>
+                  
+                  <Text style={styles.featureLabel}>Velocity Consistency:</Text>
+                  <Text style={styles.featureValue}>{gaitAnalysis.features.velocityConsistency.toFixed(3)}</Text>
+                </View>
+              </View>
+            )}
+
+            {gaitError && (
+              <View style={styles.error}>
+                <Text style={styles.errorText}>Error: {gaitError}</Text>
+              </View>
+            )}
+          </View>
+
+          {/* Step 4: Generate SEI */}
+          <View style={styles.extractionContainer}>
+            <Text style={styles.stepTitle}>Step 4: Generate SEI</Text>
             <Button title="Generate SEI" onPress={onGenerateSei} disabled={!result || generating} />
 
             {generating && (
@@ -308,5 +402,54 @@ const styles = StyleSheet.create({
   errorText: {
     color: '#c62828',
     fontSize: 14,
+  },
+  normalResult: {
+    backgroundColor: '#e8f5e9',
+  },
+  abnormalResult: {
+    backgroundColor: '#fff3e0',
+  },
+  normalText: {
+    color: '#2e7d32',
+  },
+  abnormalText: {
+    color: '#e65100',
+  },
+  gaitDetails: {
+    marginTop: 12,
+  },
+  detailLabel: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#555',
+    marginTop: 8,
+  },
+  detailValue: {
+    fontSize: 15,
+    fontWeight: 'bold',
+    color: '#000',
+    marginTop: 2,
+  },
+  featuresSeparator: {
+    height: 1,
+    backgroundColor: '#ddd',
+    marginVertical: 12,
+  },
+  featuresTitle: {
+    fontSize: 14,
+    fontWeight: 'bold',
+    color: '#333',
+    marginBottom: 8,
+  },
+  featureLabel: {
+    fontSize: 12,
+    color: '#666',
+    marginTop: 6,
+  },
+  featureValue: {
+    fontSize: 13,
+    color: '#000',
+    marginTop: 2,
+    marginLeft: 12,
   },
 });
