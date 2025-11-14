@@ -1,11 +1,11 @@
 import React, { useEffect, useRef, useState } from 'react';
 import {
-    Animated,
-    FlatList,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View,
+  Animated,
+  FlatList,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
 } from 'react-native';
 
 // Update the type definition
@@ -94,10 +94,10 @@ const GAIT_TYPES: GaitType[] = [
   },
   {
     id: 'neuropathic',
-    title: 'Neuropathic gait (Foot drop)',
+    title: 'Neuropathic gait',
     description: 'The person lifts the foot higher than normal to avoid tripping because the toes do not lift properly.',
     technicalDescription:
-      'Foot‑drop gait due to dorsiflexor weakness producing inadequate toe clearance. Compensatory increased hip/knee flexion (steppage) or hip circumduction to prevent tripping. May be unilateral or bilateral depending on peripheral nerve involvement.',
+      'Foot‑drop gait results from dorsiflexor weakness producing inadequate toe clearance and compensatory high‑steppage or hip circumduction. When dorsiflexion is weak but plantarflexor control remains, initial contact may be with a rapid uncontrolled lowering of the forefoot ("foot‑slap") rather than a controlled heel strike. Presentation may be unilateral or bilateral depending on peripheral nerve or motor pathway involvement.',
     conditions: [
       'Peroneal nerve injury',
       'Diabetic neuropathy',
