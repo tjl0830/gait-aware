@@ -28,7 +28,7 @@ async function getModelPath(): Promise<string> {
       console.log("[MediaPipe] Using model path:", modelPath);
       return modelPath;
     }
-    
+
     throw new Error("iOS not yet implemented");
   } catch (error: any) {
     console.error("[MediaPipe] Failed to get model path:", error);
@@ -104,6 +104,10 @@ export async function extractPoseFromVideo(
 
     while (hasMoreFrames && frameIndex < MAX_FRAMES) {
       try {
+        console.log(
+          `[MediaPipe] Processing frame ${frameIndex} at ${timeMs}ms...`
+        );
+
         // Extract frame as thumbnail image
         const { uri: thumbnailUri } = await VideoThumbnails.getThumbnailAsync(
           videoUri,
@@ -113,17 +117,35 @@ export async function extractPoseFromVideo(
           }
         );
 
+        console.log(`[MediaPipe] Frame ${frameIndex} extracted:`, thumbnailUri);
+
         // Run MediaPipe pose detection on this frame
-        const result = await poseModule.detectOnImage(
-          thumbnailUri,
-          1, // numPoses
-          0.5, // minPoseDetectionConfidence
-          0.5, // minPosePresenceConfidence
-          0.5, // minTrackingConfidence
-          false, // shouldOutputSegmentationMasks
-          modelPath, // Full path to model file
-          DELEGATE_GPU
+        console.log(
+          `[MediaPipe] Running detectOnImage for frame ${frameIndex}...`
         );
+        
+        let result;
+        try {
+          result = await poseModule.detectOnImage(
+            thumbnailUri,
+            1, // numPoses
+            0.5, // minPoseDetectionConfidence
+            0.5, // minPosePresenceConfidence
+            0.5, // minTrackingConfidence
+            false, // shouldOutputSegmentationMasks
+            modelPath, // Full path to model file
+            DELEGATE_CPU // Use CPU instead of GPU for stability
+          );
+        } catch (detectionError: any) {
+          console.error(`[MediaPipe] Detection failed on frame ${frameIndex}:`, detectionError.message);
+          // Clean up thumbnail and skip this frame
+          await FileSystem.deleteAsync(thumbnailUri, { idempotent: true });
+          frameIndex++;
+          timeMs += FRAME_INTERVAL_MS;
+          continue;
+        }
+
+        console.log(`[MediaPipe] Frame ${frameIndex} detection complete`);
 
         // Process detection results
         if (
