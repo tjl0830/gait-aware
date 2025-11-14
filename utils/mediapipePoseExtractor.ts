@@ -5,7 +5,7 @@
 
 import * as FileSystem from "expo-file-system/legacy";
 import * as VideoThumbnails from "expo-video-thumbnails";
-import { Asset } from "expo-asset";
+import { Platform } from "react-native";
 import { PoseJsonData } from "./landmarkExtractor";
 
 // Import react-native-mediapipe native module
@@ -17,27 +17,22 @@ const DELEGATE_CPU = 1;
 
 /**
  * Get the local file path for the MediaPipe model
- * The model is bundled with the app and needs to be accessed via expo-asset
+ * For bare workflow, model is in android/app/src/main/assets/
  */
 async function getModelPath(): Promise<string> {
   try {
-    // Load the bundled model asset
-    const asset = Asset.fromModule(
-      require("../assets/mediapipe_models/pose_landmarker.task")
-    );
-    
-    // Download to device if needed (copies from bundle to cache)
-    await asset.downloadAsync();
-    
-    if (!asset.localUri) {
-      throw new Error("Failed to load model: localUri is null");
+    if (Platform.OS === "android") {
+      // For Android, the native module accesses assets directly
+      // Path relative to assets folder
+      const modelPath = "mediapipe_models/pose_landmarker.task";
+      console.log("[MediaPipe] Using model path:", modelPath);
+      return modelPath;
     }
     
-    console.log("[MediaPipe] Model loaded from:", asset.localUri);
-    return asset.localUri;
+    throw new Error("iOS not yet implemented");
   } catch (error: any) {
-    console.error("[MediaPipe] Failed to load model:", error);
-    throw new Error(`Model loading failed: ${error.message}`);
+    console.error("[MediaPipe] Failed to get model path:", error);
+    throw new Error(`Model path error: ${error.message}`);
   }
 }
 

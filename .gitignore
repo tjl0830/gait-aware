@@ -38,9 +38,16 @@ yarn-error.*
 
 app-example
 
-# generated native folders
+# generated native folders (except assets)
 /ios
-/android
+/android/*
+!/android/app/
+/android/app/*
+!/android/app/src/
+/android/app/src/*
+!/android/app/src/main/
+/android/app/src/main/*
+!/android/app/src/main/assets/
 
 # Python training files (reference only)
 bilstm python files/
