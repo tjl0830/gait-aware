@@ -5,15 +5,41 @@
 
 import * as FileSystem from "expo-file-system/legacy";
 import * as VideoThumbnails from "expo-video-thumbnails";
+import { Asset } from "expo-asset";
 import { PoseJsonData } from "./landmarkExtractor";
 
 // Import react-native-mediapipe native module
 const { PoseDetection } = require("react-native").NativeModules;
 
 // MediaPipe constants
-const MODEL_FILE = "pose_landmarker.task";
 const DELEGATE_GPU = 0;
 const DELEGATE_CPU = 1;
+
+/**
+ * Get the local file path for the MediaPipe model
+ * The model is bundled with the app and needs to be accessed via expo-asset
+ */
+async function getModelPath(): Promise<string> {
+  try {
+    // Load the bundled model asset
+    const asset = Asset.fromModule(
+      require("../assets/mediapipe_models/pose_landmarker.task")
+    );
+    
+    // Download to device if needed (copies from bundle to cache)
+    await asset.downloadAsync();
+    
+    if (!asset.localUri) {
+      throw new Error("Failed to load model: localUri is null");
+    }
+    
+    console.log("[MediaPipe] Model loaded from:", asset.localUri);
+    return asset.localUri;
+  } catch (error: any) {
+    console.error("[MediaPipe] Failed to load model:", error);
+    throw new Error(`Model loading failed: ${error.message}`);
+  }
+}
 
 interface PoseDetectionModule {
   detectOnImage: (
@@ -49,7 +75,11 @@ export async function extractPoseFromVideo(
     }
 
     console.log(
-      `[MediaPipe] Video file size: ${((videoInfo.size || 0) / 1024 / 1024).toFixed(2)} MB`
+      `[MediaPipe] Video file size: ${(
+        (videoInfo.size || 0) /
+        1024 /
+        1024
+      ).toFixed(2)} MB`
     );
 
     // Check if PoseDetection module is available
@@ -60,14 +90,19 @@ export async function extractPoseFromVideo(
 
     const poseModule = PoseDetection as PoseDetectionModule;
 
+    // Load the MediaPipe model
+    console.log("[MediaPipe] Loading pose model...");
+    const modelPath = await getModelPath();
+    console.log("[MediaPipe] Model path:", modelPath);
+
     // Extract frames from video at 10 FPS (efficient processing)
     console.log("[MediaPipe] Extracting and processing frames...");
     const frames: any[] = [];
-    
+
     const TARGET_FPS = 10; // Extract every 100ms
     const FRAME_INTERVAL_MS = 1000 / TARGET_FPS;
     const MAX_FRAMES = 300; // Max 30 seconds
-    
+
     let frameIndex = 0;
     let timeMs = 0;
     let hasMoreFrames = true;
@@ -91,7 +126,7 @@ export async function extractPoseFromVideo(
           0.5, // minPosePresenceConfidence
           0.5, // minTrackingConfidence
           false, // shouldOutputSegmentationMasks
-          MODEL_FILE,
+          modelPath, // Full path to model file
           DELEGATE_GPU
         );
 
@@ -104,7 +139,7 @@ export async function extractPoseFromVideo(
           result.results[0].landmarks.length > 0
         ) {
           const landmarks = result.results[0].landmarks[0];
-          
+
           // Convert to our format (MediaPipe Pose has 33 landmarks)
           const formattedLandmarks = landmarks.map((lm: any) => ({
             x: lm.x || 0,
@@ -119,7 +154,9 @@ export async function extractPoseFromVideo(
           });
 
           if (frameIndex % 10 === 0) {
-            console.log(`[MediaPipe] Frame ${frameIndex}: ${formattedLandmarks.length} landmarks detected`);
+            console.log(
+              `[MediaPipe] Frame ${frameIndex}: ${formattedLandmarks.length} landmarks detected`
+            );
           }
         } else {
           // No pose detected - add zero landmarks
@@ -142,19 +179,24 @@ export async function extractPoseFromVideo(
         // Move to next frame
         frameIndex++;
         timeMs += FRAME_INTERVAL_MS;
-
       } catch (frameError: any) {
         // Check if we've reached end of video
         const errorMsg = frameError.message || "";
-        if (errorMsg.includes("time") || errorMsg.includes("duration") || errorMsg.includes("beyond")) {
-          console.log(`[MediaPipe] Reached end of video at frame ${frameIndex}`);
+        if (
+          errorMsg.includes("time") ||
+          errorMsg.includes("duration") ||
+          errorMsg.includes("beyond")
+        ) {
+          console.log(
+            `[MediaPipe] Reached end of video at frame ${frameIndex}`
+          );
           hasMoreFrames = false;
         } else {
           console.error(`[MediaPipe] Error on frame ${frameIndex}:`, errorMsg);
           // Try to continue with next frame
           frameIndex++;
           timeMs += FRAME_INTERVAL_MS;
-          
+
           // If too many consecutive errors, stop
           if (frames.length === 0 && frameIndex > 10) {
             throw new Error("Failed to extract any frames from video");
@@ -164,11 +206,15 @@ export async function extractPoseFromVideo(
     }
 
     if (frames.length === 0) {
-      throw new Error("No frames could be extracted. Please check video format.");
+      throw new Error(
+        "No frames could be extracted. Please check video format."
+      );
     }
 
     if (frames.length < 60) {
-      console.warn(`[MediaPipe] Only ${frames.length} frames extracted. Need at least 60 for analysis.`);
+      console.warn(
+        `[MediaPipe] Only ${frames.length} frames extracted. Need at least 60 for analysis.`
+      );
     }
 
     const poseData: PoseJsonData = {
@@ -181,9 +227,10 @@ export async function extractPoseFromVideo(
       },
     };
 
-    console.log(`[MediaPipe] Extraction complete: ${frames.length} frames with pose data`);
+    console.log(
+      `[MediaPipe] Extraction complete: ${frames.length} frames with pose data`
+    );
     return poseData;
-
   } catch (error: any) {
     console.error("[MediaPipe] Pose extraction failed:", error);
     throw new Error(`Pose extraction failed: ${error.message || error}`);
@@ -198,7 +245,7 @@ async function generateMockPoseData(
   onProgress?: (frameIndex: number, totalFrames: number) => void
 ): Promise<PoseJsonData> {
   console.warn("[MediaPipe] Generating mock data for testing");
-  
+
   const mockFrameCount = 90;
   const frames: any[] = [];
 
