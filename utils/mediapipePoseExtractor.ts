@@ -8,12 +8,11 @@ import * as VideoThumbnails from "expo-video-thumbnails";
 import { Platform } from "react-native";
 import { PoseJsonData } from "./landmarkExtractor";
 
-// Import react-native-mediapipe native module
+// Import react-native-mediapipe native module and types
 const { PoseDetection } = require("react-native").NativeModules;
 
-// MediaPipe constants
-const DELEGATE_GPU = 0;
-const DELEGATE_CPU = 1;
+// Import Delegate enum from react-native-mediapipe
+import { Delegate } from "react-native-mediapipe";
 
 /**
  * Get the local file path for the MediaPipe model
@@ -112,7 +111,7 @@ export async function extractPoseFromVideo(
           videoUri,
           {
             time: timeMs,
-            quality: 0.8,
+            quality: 1.0, // Maximum quality for better detection
           }
         );
 
@@ -128,12 +127,12 @@ export async function extractPoseFromVideo(
           result = await poseModule.detectOnImage(
             thumbnailUri,
             1, // numPoses
-            0.5, // minPoseDetectionConfidence
-            0.5, // minPosePresenceConfidence
-            0.5, // minTrackingConfidence
+            0.3, // minPoseDetectionConfidence (lowered from 0.5)
+            0.3, // minPosePresenceConfidence (lowered from 0.5)
+            0.3, // minTrackingConfidence (lowered from 0.5)
             false, // shouldOutputSegmentationMasks
             modelPath, // Full path to model file
-            DELEGATE_CPU // Use CPU instead of GPU for stability
+            Delegate.CPU // Use CPU delegate enum
           );
         } catch (detectionError: any) {
           console.error(`[MediaPipe] Detection failed on frame ${frameIndex}:`, detectionError.message);
