@@ -10,8 +10,8 @@ import { PoseJsonData } from "./landmarkExtractor";
 
 // Import the correct API from react-native-mediapipe
 import {
-  PoseDetectionOnImage,
   Delegate,
+  PoseDetectionOnImage,
   type PoseDetectionResultBundle,
 } from "react-native-mediapipe";
 
@@ -68,6 +68,61 @@ export async function extractPoseFromVideo(
     const modelPath = await getModelPath();
     console.log("[MediaPipe] Model path:", modelPath);
 
+    // ========== SANITY CHECK: Test detection on a single frame ==========
+    console.log("[MediaPipe] ===== SANITY CHECK: Testing single-frame detection =====");
+    try {
+      // Extract ONE frame at 1 second mark
+      const testFrame = await VideoThumbnails.getThumbnailAsync(videoUri, {
+        time: 1000,
+        quality: 1.0,
+      });
+      console.log("[MediaPipe] SANITY: Test frame extracted:", testFrame.uri);
+      
+      // Try absolute path
+      let testPath = testFrame.uri;
+      if (Platform.OS === "android" && testPath.startsWith("file://")) {
+        testPath = testPath.replace("file://", "");
+      }
+      
+      console.log("[MediaPipe] SANITY: Attempting detection with CPU delegate...");
+      const sanityResult = await PoseDetectionOnImage(testPath, modelPath, {
+        numPoses: 1,
+        minPoseDetectionConfidence: 0.5,
+        minPosePresenceConfidence: 0.5,
+        minTrackingConfidence: 0.5,
+        shouldOutputSegmentationMasks: false,
+        delegate: Delegate.CPU,
+      });
+      
+      console.log("[MediaPipe] SANITY: ✅ SUCCESS! Raw result structure:", {
+        hasResults: !!sanityResult.results,
+        resultsLength: sanityResult.results?.length || 0,
+        inferenceTime: sanityResult.inferenceTime,
+        inputSize: `${sanityResult.inputImageWidth}x${sanityResult.inputImageHeight}`,
+        firstResultLandmarks: sanityResult.results?.[0]?.landmarks?.length || 0,
+      });
+      
+      if (sanityResult.results?.[0]?.landmarks?.[0]?.length > 0) {
+        console.log("[MediaPipe] SANITY: Detected", sanityResult.results[0].landmarks[0].length, "landmarks");
+        console.log("[MediaPipe] SANITY: Sample landmark 0 (nose):", sanityResult.results[0].landmarks[0][0]);
+      } else {
+        console.warn("[MediaPipe] SANITY: ⚠️ Detection succeeded but returned no landmarks");
+      }
+      
+      // Clean up test frame
+      await FileSystem.deleteAsync(testFrame.uri, { idempotent: true });
+      console.log("[MediaPipe] SANITY: Test complete. Proceeding with full extraction...");
+    } catch (sanityError: any) {
+      console.error("[MediaPipe] SANITY: ❌ FAILED - This indicates fundamental incompatibility");
+      console.error("[MediaPipe] SANITY: Error:", sanityError?.message || sanityError);
+      console.error("[MediaPipe] SANITY: Stack:", sanityError?.stack);
+      throw new Error(
+        `Sanity check failed: ${sanityError?.message || sanityError}. ` +
+        `Model or environment incompatible. Try different model variant.`
+      );
+    }
+    console.log("[MediaPipe] ===== SANITY CHECK COMPLETE =====");
+
     // Extract frames from video at 10 FPS (efficient processing)
     console.log("[MediaPipe] Extracting and processing frames...");
     const frames: any[] = [];
@@ -118,7 +173,7 @@ export async function extractPoseFromVideo(
           `[MediaPipe] Running detectOnImage for frame ${frameIndex}...`
         );
 
-        let result: PoseDetectionResultBundle;
+        let result: PoseDetectionResultBundle | undefined;
         try {
           // Use PoseDetectionOnImage API with absolute path
           result = await PoseDetectionOnImage(imagePath, modelPath, {
@@ -149,6 +204,34 @@ export async function extractPoseFromVideo(
               detectionError?.message || detectionError
             );
             console.warn(`[MediaPipe] Model path tried: ${modelPath}`);
+            console.warn(
+              `[MediaPipe] Error details: ${JSON.stringify({
+                firstError: detectionError?.message || String(detectionError),
+                retryError: retryError?.message || String(retryError),
+                imagePath,
+                thumbnailUri,
+              })}`
+            );
+            // Optional GPU fallback for first few frames only
+            if (frameIndex < 3) {
+              try {
+                console.warn(
+                  `[MediaPipe] Attempting GPU fallback on frame ${frameIndex}`
+                );
+                result = await PoseDetectionOnImage(imagePath, modelPath, {
+                  numPoses: 1,
+                  minPoseDetectionConfidence: 0.4,
+                  minPosePresenceConfidence: 0.4,
+                  minTrackingConfidence: 0.4,
+                  shouldOutputSegmentationMasks: false,
+                  delegate: Delegate.GPU,
+                });
+              } catch (gpuError: any) {
+                console.warn(
+                  `[MediaPipe] GPU fallback failed frame ${frameIndex}: ${gpuError?.message || gpuError}`
+                );
+              }
+            }
             // Push zero landmarks and continue
             frames.push({
               frame_index: frameIndex,
@@ -161,13 +244,21 @@ export async function extractPoseFromVideo(
           }
         }
 
-        console.log(`[MediaPipe] Frame ${frameIndex} detection complete`);
+        if (result) {
+          console.log(
+            `[MediaPipe] Frame ${frameIndex} detection complete (inferenceTime=${result.inferenceTime}ms)`
+          );
+        } else {
+          console.warn(
+            `[MediaPipe] Frame ${frameIndex} detection produced no result object`
+          );
+        }
 
         // Process detection results
         // result.results is an array of PoseLandmarkerResult
         if (
           result &&
-          result.results &&
+          Array.isArray(result.results) &&
           result.results.length > 0 &&
           result.results[0].landmarks &&
           result.results[0].landmarks.length > 0 &&
@@ -241,9 +332,7 @@ export async function extractPoseFromVideo(
     }
 
     if (frames.length === 0) {
-      throw new Error(
-        "No frames processed. Detection failed on all attempts."
-      );
+      throw new Error("No frames processed. Detection failed on all attempts.");
     }
 
     if (frames.length < 60) {
