@@ -18,8 +18,34 @@ export async function extractKeypoints(videoUri: string, webViewReady: boolean, 
     setRunning(true);
     setResult(null);
     setProgress(null);
+    
+    // Log file size before processing
+    const fileInfo = await FileSystem.getInfoAsync(videoUri);
+    if (fileInfo.exists && 'size' in fileInfo) {
+      const fileSizeMB = fileInfo.size / (1024 * 1024);
+      console.log(`[Pipeline] Video file size: ${fileSizeMB.toFixed(2)} MB`);
+      
+      // Warn if file is still large (compression should have handled this)
+      // if (fileSizeMB > 10) {
+      //   console.warn(`[Pipeline] ⚠️ Warning: Large file (${fileSizeMB.toFixed(2)} MB) - may cause OOM`);
+      // }
+    }
+    
     console.log('[Pipeline] Step: Extract Keypoints - reading video as base64');
     const base64 = await FileSystem.readAsStringAsync(videoUri, { encoding: 'base64' });
+    
+    // Log base64 size (memory footprint)
+    const base64SizeMB = (base64.length * 2) / (1024 * 1024); // UTF-16, 2 bytes per char
+    console.log(`[Pipeline] Base64 size: ${base64SizeMB.toFixed(2)} MB`);
+    
+    // Additional safety check
+    // if (base64SizeMB > 15) {
+    //   throw new Error(
+    //     `Video too large for processing (${base64SizeMB.toFixed(1)} MB in memory). ` +
+    //     'Please select a shorter or lower quality video.'
+    //   );
+    // }
+    
     console.log('[Pipeline] Step: Extract Keypoints - sending to WebView');
     webViewRef.current?.postMessage(JSON.stringify({
       type: 'process_video',

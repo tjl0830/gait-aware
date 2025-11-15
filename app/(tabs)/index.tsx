@@ -16,7 +16,7 @@ import UserInfo from '../user_info';
 import { PoseResult } from '../pipeline/pipelineTypes';
 
 export default function Tab() {
-  const { videoUri, fileName, pickVideo } = useVideoPickerLogic();
+  const { videoUri, fileName, pickVideo, isCompressing } = useVideoPickerLogic();
   const [running, setRunning] = useState(false);
   const [progress, setProgress] = useState<{ frameIndex: number; percent?: number } | null>(null);
   const [result, setResult] = useState<PoseResult | null>(null);
@@ -115,7 +115,7 @@ export default function Tab() {
       <View style={styles.container}>
         <View style={styles.videoContainer}>
           <Text style={styles.stepTitle}>Step 1: Upload Video</Text>
-          <VideoPicker onPress={pickVideo} />
+          <VideoPicker onPress={pickVideo} isCompressing={isCompressing} />
           <VideoPreview uri={videoUri} fileName={fileName} player={player} />
         </View>
 
