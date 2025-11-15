@@ -300,7 +300,7 @@ export default function Tab() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#fff', paddingTop: 24 },
+  container: { flex: 1, paddingTop: 24 },
   headerRow: {
     paddingHorizontal: 20,
     paddingVertical: 8,
@@ -310,14 +310,12 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     borderBottomWidth: 1,
     borderBottomColor: '#eee',
-    backgroundColor: '#fff',
   },
   headingCompact: { fontSize: 18, fontWeight: '700', color: '#000' },
 
   form: {
     paddingHorizontal: 20,
     paddingVertical: 12,
-    backgroundColor: '#fafafa',
     marginHorizontal: 12,
     borderRadius: 8,
     marginBottom: 12,
