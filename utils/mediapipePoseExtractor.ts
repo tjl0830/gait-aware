@@ -22,8 +22,8 @@ import {
 async function getModelPath(): Promise<string> {
   try {
     if (Platform.OS === "android") {
-      // Model file bundled in android/app/src/main/assets/
-      const modelPath = "pose_landmarker.task";
+      // Use LITE model variant - more compatible with Android devices
+      const modelPath = "pose_landmarker_lite.task";
       console.log("[MediaPipe] Using model path:", modelPath);
       return modelPath;
     }
@@ -69,7 +69,9 @@ export async function extractPoseFromVideo(
     console.log("[MediaPipe] Model path:", modelPath);
 
     // ========== SANITY CHECK: Test detection on a single frame ==========
-    console.log("[MediaPipe] ===== SANITY CHECK: Testing single-frame detection =====");
+    console.log(
+      "[MediaPipe] ===== SANITY CHECK: Testing single-frame detection ====="
+    );
     try {
       // Extract ONE frame at 1 second mark
       const testFrame = await VideoThumbnails.getThumbnailAsync(videoUri, {
@@ -77,14 +79,16 @@ export async function extractPoseFromVideo(
         quality: 1.0,
       });
       console.log("[MediaPipe] SANITY: Test frame extracted:", testFrame.uri);
-      
+
       // Try absolute path
       let testPath = testFrame.uri;
       if (Platform.OS === "android" && testPath.startsWith("file://")) {
         testPath = testPath.replace("file://", "");
       }
-      
-      console.log("[MediaPipe] SANITY: Attempting detection with CPU delegate...");
+
+      console.log(
+        "[MediaPipe] SANITY: Attempting detection with CPU delegate..."
+      );
       const sanityResult = await PoseDetectionOnImage(testPath, modelPath, {
         numPoses: 1,
         minPoseDetectionConfidence: 0.5,
@@ -93,7 +97,7 @@ export async function extractPoseFromVideo(
         shouldOutputSegmentationMasks: false,
         delegate: Delegate.CPU,
       });
-      
+
       console.log("[MediaPipe] SANITY: ✅ SUCCESS! Raw result structure:", {
         hasResults: !!sanityResult.results,
         resultsLength: sanityResult.results?.length || 0,
@@ -101,24 +105,40 @@ export async function extractPoseFromVideo(
         inputSize: `${sanityResult.inputImageWidth}x${sanityResult.inputImageHeight}`,
         firstResultLandmarks: sanityResult.results?.[0]?.landmarks?.length || 0,
       });
-      
+
       if (sanityResult.results?.[0]?.landmarks?.[0]?.length > 0) {
-        console.log("[MediaPipe] SANITY: Detected", sanityResult.results[0].landmarks[0].length, "landmarks");
-        console.log("[MediaPipe] SANITY: Sample landmark 0 (nose):", sanityResult.results[0].landmarks[0][0]);
+        console.log(
+          "[MediaPipe] SANITY: Detected",
+          sanityResult.results[0].landmarks[0].length,
+          "landmarks"
+        );
+        console.log(
+          "[MediaPipe] SANITY: Sample landmark 0 (nose):",
+          sanityResult.results[0].landmarks[0][0]
+        );
       } else {
-        console.warn("[MediaPipe] SANITY: ⚠️ Detection succeeded but returned no landmarks");
+        console.warn(
+          "[MediaPipe] SANITY: ⚠️ Detection succeeded but returned no landmarks"
+        );
       }
-      
+
       // Clean up test frame
       await FileSystem.deleteAsync(testFrame.uri, { idempotent: true });
-      console.log("[MediaPipe] SANITY: Test complete. Proceeding with full extraction...");
+      console.log(
+        "[MediaPipe] SANITY: Test complete. Proceeding with full extraction..."
+      );
     } catch (sanityError: any) {
-      console.error("[MediaPipe] SANITY: ❌ FAILED - This indicates fundamental incompatibility");
-      console.error("[MediaPipe] SANITY: Error:", sanityError?.message || sanityError);
+      console.error(
+        "[MediaPipe] SANITY: ❌ FAILED - This indicates fundamental incompatibility"
+      );
+      console.error(
+        "[MediaPipe] SANITY: Error:",
+        sanityError?.message || sanityError
+      );
       console.error("[MediaPipe] SANITY: Stack:", sanityError?.stack);
       throw new Error(
         `Sanity check failed: ${sanityError?.message || sanityError}. ` +
-        `Model or environment incompatible. Try different model variant.`
+          `Model or environment incompatible. Try different model variant.`
       );
     }
     console.log("[MediaPipe] ===== SANITY CHECK COMPLETE =====");
@@ -228,7 +248,9 @@ export async function extractPoseFromVideo(
                 });
               } catch (gpuError: any) {
                 console.warn(
-                  `[MediaPipe] GPU fallback failed frame ${frameIndex}: ${gpuError?.message || gpuError}`
+                  `[MediaPipe] GPU fallback failed frame ${frameIndex}: ${
+                    gpuError?.message || gpuError
+                  }`
                 );
               }
             }
