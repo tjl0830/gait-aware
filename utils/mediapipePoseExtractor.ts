@@ -1,52 +1,28 @@
 /**
- * MediaPipe Pose Extractor using react-native-mediapipe
+ * MediaPipe Pose Extractor using MediaPipe JS via WebView
  * Extracts pose landmarks from video files by processing frames
  */
 
 import * as FileSystem from "expo-file-system/legacy";
 import * as VideoThumbnails from "expo-video-thumbnails";
-import { Platform } from "react-native";
 import { PoseJsonData } from "./landmarkExtractor";
-
-// Import the correct API from react-native-mediapipe
-import {
-  Delegate,
-  PoseDetectionOnImage,
-  type PoseDetectionResultBundle,
-} from "react-native-mediapipe";
+import type { PoseDetectorRef } from "../components/MediaPipePoseDetector";
 
 /**
- * Get the local file path for the MediaPipe model
- * For Android bare workflow with assets
- */
-async function getModelPath(): Promise<string> {
-  try {
-    if (Platform.OS === "android") {
-      // Use LITE model variant - more compatible with Android devices
-      const modelPath = "pose_landmarker_lite.task";
-      console.log("[MediaPipe] Using model path:", modelPath);
-      return modelPath;
-    }
-
-    throw new Error("iOS not yet implemented");
-  } catch (error: any) {
-    console.error("[MediaPipe] Failed to get model path:", error);
-    throw new Error(`Model path error: ${error.message}`);
-  }
-}
-
-/**
- * Extract pose landmarks from a video file using MediaPipe
- * Strategy: Extract frames as images, run MediaPipe on each frame
+ * Extract pose landmarks from a video file using MediaPipe JS
+ * This function requires a PoseDetectorRef (WebView component) to be passed in
  * @param videoUri - Local file URI of the video
+ * @param poseDetector - Reference to the MediaPipePoseDetector component
  * @param onProgress - Callback for progress updates
  * @returns PoseJsonData with all frames and landmarks
  */
 export async function extractPoseFromVideo(
   videoUri: string,
+  poseDetector: PoseDetectorRef,
   onProgress?: (frameIndex: number, totalFrames: number) => void
 ): Promise<PoseJsonData> {
   console.log(`[MediaPipe] Starting pose extraction from: ${videoUri}`);
+
 
   try {
     // Get video metadata
@@ -63,87 +39,12 @@ export async function extractPoseFromVideo(
       ).toFixed(2)} MB`
     );
 
-    // Load the MediaPipe model
-    console.log("[MediaPipe] Loading pose model...");
-    const modelPath = await getModelPath();
-    console.log("[MediaPipe] Model path:", modelPath);
+    // Initialize MediaPipe in WebView
+    console.log("[MediaPipe] Initializing pose detector...");
+    await poseDetector.initialize();
+    console.log("[MediaPipe] Pose detector initialized");
 
-    // ========== SANITY CHECK: Test detection on a single frame ==========
-    console.log(
-      "[MediaPipe] ===== SANITY CHECK: Testing single-frame detection ====="
-    );
-    try {
-      // Extract ONE frame at 1 second mark
-      const testFrame = await VideoThumbnails.getThumbnailAsync(videoUri, {
-        time: 1000,
-        quality: 1.0,
-      });
-      console.log("[MediaPipe] SANITY: Test frame extracted:", testFrame.uri);
-
-      // Try absolute path
-      let testPath = testFrame.uri;
-      if (Platform.OS === "android" && testPath.startsWith("file://")) {
-        testPath = testPath.replace("file://", "");
-      }
-
-      console.log(
-        "[MediaPipe] SANITY: Attempting detection with CPU delegate..."
-      );
-      const sanityResult = await PoseDetectionOnImage(testPath, modelPath, {
-        numPoses: 1,
-        minPoseDetectionConfidence: 0.5,
-        minPosePresenceConfidence: 0.5,
-        minTrackingConfidence: 0.5,
-        shouldOutputSegmentationMasks: false,
-        delegate: Delegate.CPU,
-      });
-
-      console.log("[MediaPipe] SANITY: ✅ SUCCESS! Raw result structure:", {
-        hasResults: !!sanityResult.results,
-        resultsLength: sanityResult.results?.length || 0,
-        inferenceTime: sanityResult.inferenceTime,
-        inputSize: `${sanityResult.inputImageWidth}x${sanityResult.inputImageHeight}`,
-        firstResultLandmarks: sanityResult.results?.[0]?.landmarks?.length || 0,
-      });
-
-      if (sanityResult.results?.[0]?.landmarks?.[0]?.length > 0) {
-        console.log(
-          "[MediaPipe] SANITY: Detected",
-          sanityResult.results[0].landmarks[0].length,
-          "landmarks"
-        );
-        console.log(
-          "[MediaPipe] SANITY: Sample landmark 0 (nose):",
-          sanityResult.results[0].landmarks[0][0]
-        );
-      } else {
-        console.warn(
-          "[MediaPipe] SANITY: ⚠️ Detection succeeded but returned no landmarks"
-        );
-      }
-
-      // Clean up test frame
-      await FileSystem.deleteAsync(testFrame.uri, { idempotent: true });
-      console.log(
-        "[MediaPipe] SANITY: Test complete. Proceeding with full extraction..."
-      );
-    } catch (sanityError: any) {
-      console.error(
-        "[MediaPipe] SANITY: ❌ FAILED - This indicates fundamental incompatibility"
-      );
-      console.error(
-        "[MediaPipe] SANITY: Error:",
-        sanityError?.message || sanityError
-      );
-      console.error("[MediaPipe] SANITY: Stack:", sanityError?.stack);
-      throw new Error(
-        `Sanity check failed: ${sanityError?.message || sanityError}. ` +
-          `Model or environment incompatible. Try different model variant.`
-      );
-    }
-    console.log("[MediaPipe] ===== SANITY CHECK COMPLETE =====");
-
-    // Extract frames from video at 10 FPS (efficient processing)
+    // Extract frames from video at 10 FPS
     console.log("[MediaPipe] Extracting and processing frames...");
     const frames: any[] = [];
 
@@ -172,143 +73,46 @@ export async function extractPoseFromVideo(
 
         console.log(`[MediaPipe] Frame ${frameIndex} extracted:`, thumbnailUri);
 
-        // Verify thumbnail exists and log size (helps diagnose path issues)
+        // Run MediaPipe pose detection via WebView
         try {
-          const info = await FileSystem.getInfoAsync(thumbnailUri);
-          console.log(`[MediaPipe] Thumb info:`, info as any);
-        } catch (e) {
-          console.warn(`[MediaPipe] Could not stat thumbnail:`, e);
-        }
+          const landmarks = await poseDetector.detectFrame(
+            thumbnailUri,
+            frameIndex
+          );
 
-        // Convert file:// URI to absolute path for Android
-        // MediaPipe native module might need path without file:// prefix
-        let imagePath = thumbnailUri;
-        if (Platform.OS === "android" && imagePath.startsWith("file://")) {
-          imagePath = imagePath.replace("file://", "");
-          console.log(`[MediaPipe] Converted to path:`, imagePath);
-        }
+          if (landmarks && landmarks.length > 0) {
+            // MediaPipe returns 33 landmarks
+            const formattedLandmarks = landmarks.map((lm) => ({
+              x: lm.x || 0,
+              y: lm.y || 0,
+              z: lm.z || 0,
+              visibility: lm.visibility || 0,
+            }));
 
-        // Run MediaPipe pose detection on this frame
-        console.log(
-          `[MediaPipe] Running detectOnImage for frame ${frameIndex}...`
-        );
-
-        let result: PoseDetectionResultBundle | undefined;
-        try {
-          // Use PoseDetectionOnImage API with absolute path
-          result = await PoseDetectionOnImage(imagePath, modelPath, {
-            numPoses: 1,
-            minPoseDetectionConfidence: 0.5,
-            minPosePresenceConfidence: 0.5,
-            minTrackingConfidence: 0.5,
-            shouldOutputSegmentationMasks: false,
-            delegate: Delegate.CPU,
-          });
-        } catch (detectionError: any) {
-          // Retry with file:// URI format
-          try {
-            console.warn(
-              `[MediaPipe] First attempt failed, retry with URI for frame ${frameIndex}`
-            );
-            result = await PoseDetectionOnImage(thumbnailUri, modelPath, {
-              numPoses: 1,
-              minPoseDetectionConfidence: 0.5,
-              minPosePresenceConfidence: 0.5,
-              minTrackingConfidence: 0.5,
-              shouldOutputSegmentationMasks: false,
-              delegate: Delegate.CPU,
+            frames.push({
+              frame_index: frameIndex,
+              landmarks: formattedLandmarks,
             });
-          } catch (retryError: any) {
-            console.error(
-              `[MediaPipe] Detection failed on frame ${frameIndex}:`,
-              detectionError?.message || detectionError
-            );
-            console.warn(`[MediaPipe] Model path tried: ${modelPath}`);
-            console.warn(
-              `[MediaPipe] Error details: ${JSON.stringify({
-                firstError: detectionError?.message || String(detectionError),
-                retryError: retryError?.message || String(retryError),
-                imagePath,
-                thumbnailUri,
-              })}`
-            );
-            // Optional GPU fallback for first few frames only
-            if (frameIndex < 3) {
-              try {
-                console.warn(
-                  `[MediaPipe] Attempting GPU fallback on frame ${frameIndex}`
-                );
-                result = await PoseDetectionOnImage(imagePath, modelPath, {
-                  numPoses: 1,
-                  minPoseDetectionConfidence: 0.4,
-                  minPosePresenceConfidence: 0.4,
-                  minTrackingConfidence: 0.4,
-                  shouldOutputSegmentationMasks: false,
-                  delegate: Delegate.GPU,
-                });
-              } catch (gpuError: any) {
-                console.warn(
-                  `[MediaPipe] GPU fallback failed frame ${frameIndex}: ${
-                    gpuError?.message || gpuError
-                  }`
-                );
-              }
+
+            if (frameIndex % 10 === 0) {
+              console.log(
+                `[MediaPipe] Frame ${frameIndex}: ${formattedLandmarks.length} landmarks detected`
+              );
             }
-            // Push zero landmarks and continue
+          } else {
+            // No pose detected - add zero landmarks
+            console.warn(`[MediaPipe] Frame ${frameIndex}: No pose detected`);
             frames.push({
               frame_index: frameIndex,
               landmarks: Array(33).fill({ x: 0, y: 0, z: 0, visibility: 0 }),
             });
-            await FileSystem.deleteAsync(thumbnailUri, { idempotent: true });
-            frameIndex++;
-            timeMs += FRAME_INTERVAL_MS;
-            continue;
           }
-        }
-
-        if (result) {
-          console.log(
-            `[MediaPipe] Frame ${frameIndex} detection complete (inferenceTime=${result.inferenceTime}ms)`
+        } catch (detectionError: any) {
+          console.error(
+            `[MediaPipe] Detection failed on frame ${frameIndex}:`,
+            detectionError?.message || detectionError
           );
-        } else {
-          console.warn(
-            `[MediaPipe] Frame ${frameIndex} detection produced no result object`
-          );
-        }
-
-        // Process detection results
-        // result.results is an array of PoseLandmarkerResult
-        if (
-          result &&
-          Array.isArray(result.results) &&
-          result.results.length > 0 &&
-          result.results[0].landmarks &&
-          result.results[0].landmarks.length > 0 &&
-          result.results[0].landmarks[0].length > 0
-        ) {
-          const landmarks = result.results[0].landmarks[0];
-
-          // Convert to our format (MediaPipe Pose has 33 landmarks)
-          const formattedLandmarks = landmarks.map((lm: any) => ({
-            x: lm.x || 0,
-            y: lm.y || 0,
-            z: lm.z || 0,
-            visibility: lm.visibility || 0,
-          }));
-
-          frames.push({
-            frame_index: frameIndex,
-            landmarks: formattedLandmarks,
-          });
-
-          if (frameIndex % 10 === 0) {
-            console.log(
-              `[MediaPipe] Frame ${frameIndex}: ${formattedLandmarks.length} landmarks detected`
-            );
-          }
-        } else {
-          // No pose detected - add zero landmarks
-          console.warn(`[MediaPipe] Frame ${frameIndex}: No pose detected`);
+          // Push zero landmarks and continue
           frames.push({
             frame_index: frameIndex,
             landmarks: Array(33).fill({ x: 0, y: 0, z: 0, visibility: 0 }),
@@ -382,84 +186,3 @@ export async function extractPoseFromVideo(
     throw new Error(`Pose extraction failed: ${error.message || error}`);
   }
 }
-
-/**
- * Generate mock pose data for testing without native module
- */
-async function generateMockPoseData(
-  videoUri: string,
-  onProgress?: (frameIndex: number, totalFrames: number) => void
-): Promise<PoseJsonData> {
-  console.warn("[MediaPipe] Generating mock data for testing");
-
-  const mockFrameCount = 90;
-  const frames: any[] = [];
-
-  for (let i = 0; i < mockFrameCount; i++) {
-    if (onProgress) {
-      onProgress(i + 1, mockFrameCount);
-    }
-
-    // Create mock landmarks (33 landmarks in MediaPipe Pose format)
-    const landmarks = Array.from({ length: 33 }, () => ({
-      x: 0.5 + Math.random() * 0.1 - 0.05,
-      y: 0.5 + Math.random() * 0.1 - 0.05,
-      z: -0.1 + Math.random() * 0.05,
-      visibility: 0.9 + Math.random() * 0.1,
-    }));
-
-    frames.push({
-      frame_index: i,
-      landmarks: landmarks,
-    });
-
-    await new Promise((resolve) => setTimeout(resolve, 10));
-  }
-
-  return {
-    frames: frames,
-    metadata: {
-      frame_count: mockFrameCount,
-      width: 1920,
-      height: 1080,
-      fps: 30,
-    },
-  };
-}
-
-/**
- * TODO: Real MediaPipe integration steps:
- *
- * 1. Download MediaPipe pose model (.task file)
- *    - Place in assets/mediapipe_models/pose_landmarker.task
- *    - Update react-native.config.js to bundle it
- *
- * 2. Use react-native-mediapipe PoseDetection module:
- *    ```typescript
- *    import { PoseDetection, RunningMode } from 'react-native-mediapipe';
- *
- *    const detector = await PoseDetection.createDetector(
- *      1, // numPoses
- *      0.5, // minPoseDetectionConfidence
- *      0.5, // minPosePresenceConfidence
- *      0.5, // minTrackingConfidence
- *      false, // shouldOutputSegmentationMasks
- *      'pose_landmarker.task',
- *      Delegate.GPU,
- *      RunningMode.VIDEO
- *    );
- *    ```
- *
- * 3. Extract frames using MediaMetadataRetriever (Android) or AVFoundation (iOS)
- *    - The library handles this internally
- *
- * 4. Process each frame:
- *    ```typescript
- *    for (let frameIndex = 0; frameIndex < totalFrames; frameIndex++) {
- *      const result = await detector.detectOnVideo(videoUri, frameIndex);
- *      // result.landmarks contains the 33 pose landmarks
- *    }
- *    ```
- *
- * 5. Format results to match our PoseJsonData interface
- */

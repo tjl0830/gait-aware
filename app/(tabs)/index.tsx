@@ -1,12 +1,12 @@
 /**
  * Gait Analysis - Main Screen
- * Using react-native-mediapipe for reliable offline pose detection
+ * Using MediaPipe JS via WebView for reliable offline pose detection
  * Upload Video → Extract Pose (MediaPipe) → Analyze Gait (BiLSTM) → View Results
  */
 
 import * as FileSystem from "expo-file-system/legacy";
 import { useVideoPlayer } from "expo-video";
-import React, { useState } from "react";
+import React, { useState, useRef } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -26,9 +26,14 @@ import {
   getVideoRequirements,
   validateVideo,
 } from "../../utils/videoValidation";
+import {
+  MediaPipePoseDetector,
+  type PoseDetectorRef,
+} from "../../components/MediaPipePoseDetector";
 
 export default function GaitAnalysisScreen() {
   const { videoUri, fileName, pickVideo } = useVideoPickerLogic();
+  const poseDetectorRef = useRef<PoseDetectorRef>(null);
 
   // Analysis state
   const [analyzing, setAnalyzing] = useState(false);
@@ -56,6 +61,11 @@ export default function GaitAnalysisScreen() {
       return;
     }
 
+    if (!poseDetectorRef.current) {
+      setError("MediaPipe detector not initialized");
+      return;
+    }
+
     // Reset state
     setResult(null);
     setError(null);
@@ -73,12 +83,13 @@ export default function GaitAnalysisScreen() {
         Alert.alert("Note", videoValidation.warnings.join("\n"));
       }
 
-      console.log("Starting pose extraction with react-native-mediapipe...");
+      console.log("Starting pose extraction with MediaPipe JS...");
       setProgress({ stage: "extracting", percent: 0 });
 
-      // Extract pose using MediaPipe
+      // Extract pose using MediaPipe WebView
       const poseData = await extractPoseFromVideo(
         videoUri,
+        poseDetectorRef.current,
         (frameIndex: number, totalFrames: number) => {
           const percent = Math.round((frameIndex / totalFrames) * 100);
           setProgress({ stage: "extracting", frameIndex, percent });
@@ -154,6 +165,12 @@ export default function GaitAnalysisScreen() {
 
   return (
     <ScrollView style={styles.container}>
+      {/* Hidden MediaPipe detector */}
+      <MediaPipePoseDetector
+        ref={poseDetectorRef}
+        onError={(err) => console.error("[MediaPipe] Error:", err)}
+      />
+
       <View style={styles.content}>
         {/* Header */}
         <View style={styles.header}>

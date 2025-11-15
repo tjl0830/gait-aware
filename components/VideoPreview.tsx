@@ -10,7 +10,7 @@ type VideoPreviewProps = {
 };
 
 export function VideoPreview({ uri, fileName, player }: VideoPreviewProps) {
-  if (!uri) {
+  if (!uri || !player) {
     return <Text style={styles.hint}>No video selected</Text>;
   }
 

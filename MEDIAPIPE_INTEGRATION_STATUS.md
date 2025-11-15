@@ -3,29 +3,35 @@
 ## ✅ What We've Accomplished
 
 ### 1. Installed Dependencies
+
 ```bash
 npm install react-native-mediapipe react-native-vision-camera react-native-worklets-core @shopify/react-native-skia
 ```
 
 **Packages Added:**
+
 - `react-native-mediapipe` - MediaPipe pose detection for React Native
 - `react-native-vision-camera` - Camera access (required by mediapipe)
 - `react-native-worklets-core` - JS worklets for frame processing
 - `@shopify/react-native-skia` - Canvas rendering for visualizations
 
 ### 2. Ran Expo Prebuild
+
 ```bash
 npx expo prebuild --clean
 ```
 
 **Result:** Created native `android/` and `ios/` folders
+
 - This was necessary because react-native-mediapipe requires native modules
 - We're now using **Expo bare workflow** (not managed workflow)
 
 ### 3. Updated Code Structure
 
 **Created Files:**
+
 - `utils/mediapipePoseExtractor.ts` - Wrapper for MediaPipe pose detection
+
   - Currently has placeholder implementation
   - Documented TODO steps for real MediaPipe integration
   - Returns mock 33-landmark data for testing pipeline
@@ -34,6 +40,7 @@ npx expo prebuild --clean
   - Bundles MediaPipe model files from `assets/mediapipe_models/`
 
 **Updated Files:**
+
 - `app/(tabs)/index.tsx` - Complete rewrite
   - Removed all WebView code
   - Now uses `extractPoseFromVideo()` from MediaPipe extractor
@@ -41,14 +48,17 @@ npx expo prebuild --clean
   - Progress tracking with frame count and percentage
 
 ### 4. Created Asset Directory
+
 - `assets/mediapipe_models/` - Ready for MediaPipe pose model file
 
 ## 📋 Next Steps (TODO)
 
 ### Step 1: Download MediaPipe Pose Model
+
 **Model Required:** `pose_landmarker.task` or `pose_landmarker_heavy.task`
 
 **Download from:**
+
 ```
 https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_lite/float16/latest/pose_landmarker_lite.task
 https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_full/float16/latest/pose_landmarker_full.task
@@ -56,6 +66,7 @@ https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_
 ```
 
 **Action:**
+
 ```bash
 # Download model (choose one)
 curl -o assets/mediapipe_models/pose_landmarker.task https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_full/float16/latest/pose_landmarker_full.task
@@ -70,17 +81,18 @@ curl -o assets/mediapipe_models/pose_landmarker.task https://storage.googleapis.
 **Current Status:** Placeholder with mock data
 
 **Implementation needed:**
+
 ```typescript
-import { PoseDetection, RunningMode, Delegate } from 'react-native-mediapipe';
+import { PoseDetection, RunningMode, Delegate } from "react-native-mediapipe";
 
 // 1. Create detector
 const detector = await PoseDetection.createDetector(
   1, // numPoses
-  0.5, // minPoseDetectionConfidence  
+  0.5, // minPoseDetectionConfidence
   0.5, // minPosePresenceConfidence
   0.5, // minTrackingConfidence
   false, // shouldOutputSegmentationMasks
-  'pose_landmarker.task', // model file
+  "pose_landmarker.task", // model file
   Delegate.GPU,
   RunningMode.VIDEO
 );
@@ -92,7 +104,7 @@ const results = await detector.detectOnVideo(videoUri);
 // 3. Extract landmarks
 const frames = results.map((result, index) => ({
   frame_index: index,
-  landmarks: result.landmarks[0] // 33 landmarks per frame
+  landmarks: result.landmarks[0], // 33 landmarks per frame
 }));
 ```
 
@@ -101,16 +113,19 @@ const frames = results.map((result, index) => ({
 ### Step 3: Build & Test
 
 **Build for Android:**
+
 ```bash
 npx expo run:android
 ```
 
 **Build for iOS:**
+
 ```bash
 npx expo run:ios
 ```
 
 **Or create development build with EAS:**
+
 ```bash
 eas build --profile development --platform android
 ```
@@ -118,6 +133,7 @@ eas build --profile development --platform android
 ### Step 4: Verify Full Pipeline
 
 **Test Flow:**
+
 1. Upload a gait video (10-30 seconds)
 2. Watch progress: "Extracting keypoints: frame X (Y%)"
 3. Validate: Should extract 33 landmarks per frame
@@ -125,6 +141,7 @@ eas build --profile development --platform android
 5. Results: MSE-based classification with 0.174969 threshold
 
 **Expected Console Logs:**
+
 ```
 [MediaPipe] Starting pose extraction from: file:///.../video.mp4
 [MediaPipe] Video file size: 4.25 MB
@@ -184,13 +201,16 @@ Display Results (Normal/Abnormal + confidence + details)
 ## ⚠️ Important Notes
 
 ### 1. This is No Longer Expo Managed Workflow
+
 After running `expo prebuild`, we're in **bare workflow**. This means:
+
 - Cannot use `expo start` for development
 - Must build native app with `npx expo run:android` or `npx expo run:ios`
 - Or use EAS Build: `eas build --profile development`
 - Native modules work (react-native-mediapipe ✅)
 
 ### 2. MediaPipe Model Size
+
 - **Lite:** ~3 MB (faster, less accurate)
 - **Full:** ~6 MB (balanced)
 - **Heavy:** ~12 MB (slower, more accurate)
@@ -198,12 +218,15 @@ After running `expo prebuild`, we're in **bare workflow**. This means:
 **Recommendation:** Start with **Full** model for balance
 
 ### 3. Offline Capability
+
 ✅ react-native-mediapipe works **completely offline**
+
 - Model bundled in app
 - No CDN dependencies
 - No internet required after installation
 
 ### 4. Performance Expectations
+
 - **Frame extraction:** ~1-2 seconds per second of video
 - **BiLSTM inference:** <1 second (after extraction)
 - **Total:** A 10-second video should process in ~10-12 seconds
@@ -211,6 +234,7 @@ After running `expo prebuild`, we're in **bare workflow**. This means:
 ## 🐛 Troubleshooting
 
 ### If build fails:
+
 ```bash
 # Android
 cd android
@@ -226,11 +250,13 @@ npx expo run:ios
 ```
 
 ### If MediaPipe not found:
+
 - Check model file exists: `assets/mediapipe_models/pose_landmarker.task`
 - Check react-native.config.js bundles assets
 - Rebuild app after adding model file
 
 ### If pose detection fails:
+
 - Check console logs for [MediaPipe] messages
 - Verify video file is accessible (file URI valid)
 - Try with shorter video first (10 seconds)
@@ -239,17 +265,20 @@ npx expo run:ios
 ## 📱 Testing Strategy
 
 1. **Test placeholder first** (current state)
+
    - Upload video
    - See mock extraction progress
    - Verify BiLSTM analysis runs with mock data
    - Confirms UI and pipeline work
 
 2. **Add MediaPipe model**
+
    - Download and place model file
    - Rebuild app
    - Verify model loads
 
 3. **Implement real extraction**
+
    - Update mediapipePoseExtractor.ts
    - Test with simple video
    - Verify 33 landmarks extracted
@@ -263,6 +292,7 @@ npx expo run:ios
 ## 🎉 Success Criteria
 
 When everything works, you should see:
+
 1. ✅ Video uploads successfully
 2. ✅ Progress updates smoothly (frame-by-frame)
 3. ✅ 33 landmarks extracted per frame
