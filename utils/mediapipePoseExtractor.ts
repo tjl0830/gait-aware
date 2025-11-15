@@ -8,11 +8,12 @@ import * as VideoThumbnails from "expo-video-thumbnails";
 import { Platform } from "react-native";
 import { PoseJsonData } from "./landmarkExtractor";
 
-// Import react-native-mediapipe native module and types
-const { PoseDetection } = require("react-native").NativeModules;
-
-// Import Delegate enum from react-native-mediapipe
-import { Delegate } from "react-native-mediapipe";
+// Import the correct API from react-native-mediapipe
+import {
+  PoseDetectionOnImage,
+  Delegate,
+  type PoseDetectionResultBundle,
+} from "react-native-mediapipe";
 
 /**
  * Get the local file path for the MediaPipe model
@@ -21,7 +22,7 @@ import { Delegate } from "react-native-mediapipe";
 async function getModelPath(): Promise<string> {
   try {
     if (Platform.OS === "android") {
-      // Try just the model filename - Android assets manager may look in assets/ automatically
+      // Model file bundled in android/app/src/main/assets/
       const modelPath = "pose_landmarker.task";
       console.log("[MediaPipe] Using model path:", modelPath);
       return modelPath;
@@ -32,19 +33,6 @@ async function getModelPath(): Promise<string> {
     console.error("[MediaPipe] Failed to get model path:", error);
     throw new Error(`Model path error: ${error.message}`);
   }
-}
-
-interface PoseDetectionModule {
-  detectOnImage: (
-    imagePath: string,
-    numPoses: number,
-    minPoseDetectionConfidence: number,
-    minPosePresenceConfidence: number,
-    minTrackingConfidence: number,
-    shouldOutputSegmentationMasks: boolean,
-    model: string,
-    delegate: number
-  ) => Promise<any>;
 }
 
 /**
@@ -74,14 +62,6 @@ export async function extractPoseFromVideo(
         1024
       ).toFixed(2)} MB`
     );
-
-    // Check if PoseDetection module is available
-    if (!PoseDetection) {
-      console.warn("[MediaPipe] Native module not available - using mock data");
-      return generateMockPoseData(videoUri, onProgress);
-    }
-
-    const poseModule = PoseDetection as PoseDetectionModule;
 
     // Load the MediaPipe model
     console.log("[MediaPipe] Loading pose model...");
@@ -117,6 +97,14 @@ export async function extractPoseFromVideo(
 
         console.log(`[MediaPipe] Frame ${frameIndex} extracted:`, thumbnailUri);
 
+        // Verify thumbnail exists and log size (helps diagnose path issues)
+        try {
+          const info = await FileSystem.getInfoAsync(thumbnailUri);
+          console.log(`[MediaPipe] Thumb info:`, info as any);
+        } catch (e) {
+          console.warn(`[MediaPipe] Could not stat thumbnail:`, e);
+        }
+
         // Convert file:// URI to absolute path for Android
         // MediaPipe native module might need path without file:// prefix
         let imagePath = thumbnailUri;
@@ -130,39 +118,60 @@ export async function extractPoseFromVideo(
           `[MediaPipe] Running detectOnImage for frame ${frameIndex}...`
         );
 
-        let result;
+        let result: PoseDetectionResultBundle;
         try {
-          result = await poseModule.detectOnImage(
-            imagePath, // Use converted path instead of thumbnailUri
-            1, // numPoses
-            0.3, // minPoseDetectionConfidence (lowered from 0.5)
-            0.3, // minPosePresenceConfidence (lowered from 0.5)
-            0.3, // minTrackingConfidence (lowered from 0.5)
-            false, // shouldOutputSegmentationMasks
-            modelPath, // Full path to model file
-            Delegate.CPU // Use CPU delegate enum
-          );
+          // Use PoseDetectionOnImage API with absolute path
+          result = await PoseDetectionOnImage(imagePath, modelPath, {
+            numPoses: 1,
+            minPoseDetectionConfidence: 0.5,
+            minPosePresenceConfidence: 0.5,
+            minTrackingConfidence: 0.5,
+            shouldOutputSegmentationMasks: false,
+            delegate: Delegate.CPU,
+          });
         } catch (detectionError: any) {
-          console.error(
-            `[MediaPipe] Detection failed on frame ${frameIndex}:`,
-            detectionError.message
-          );
-          // Clean up thumbnail and skip this frame
-          await FileSystem.deleteAsync(thumbnailUri, { idempotent: true });
-          frameIndex++;
-          timeMs += FRAME_INTERVAL_MS;
-          continue;
+          // Retry with file:// URI format
+          try {
+            console.warn(
+              `[MediaPipe] First attempt failed, retry with URI for frame ${frameIndex}`
+            );
+            result = await PoseDetectionOnImage(thumbnailUri, modelPath, {
+              numPoses: 1,
+              minPoseDetectionConfidence: 0.5,
+              minPosePresenceConfidence: 0.5,
+              minTrackingConfidence: 0.5,
+              shouldOutputSegmentationMasks: false,
+              delegate: Delegate.CPU,
+            });
+          } catch (retryError: any) {
+            console.error(
+              `[MediaPipe] Detection failed on frame ${frameIndex}:`,
+              detectionError?.message || detectionError
+            );
+            console.warn(`[MediaPipe] Model path tried: ${modelPath}`);
+            // Push zero landmarks and continue
+            frames.push({
+              frame_index: frameIndex,
+              landmarks: Array(33).fill({ x: 0, y: 0, z: 0, visibility: 0 }),
+            });
+            await FileSystem.deleteAsync(thumbnailUri, { idempotent: true });
+            frameIndex++;
+            timeMs += FRAME_INTERVAL_MS;
+            continue;
+          }
         }
 
         console.log(`[MediaPipe] Frame ${frameIndex} detection complete`);
 
         // Process detection results
+        // result.results is an array of PoseLandmarkerResult
         if (
           result &&
           result.results &&
           result.results.length > 0 &&
           result.results[0].landmarks &&
-          result.results[0].landmarks.length > 0
+          result.results[0].landmarks.length > 0 &&
+          result.results[0].landmarks[0].length > 0
         ) {
           const landmarks = result.results[0].landmarks[0];
 
@@ -233,7 +242,7 @@ export async function extractPoseFromVideo(
 
     if (frames.length === 0) {
       throw new Error(
-        "No frames could be extracted. Please check video format."
+        "No frames processed. Detection failed on all attempts."
       );
     }
 
