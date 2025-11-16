@@ -736,7 +736,7 @@ export default function Tab() {
 
         <View style={styles.rowRight}>
           <TouchableOpacity style={styles.pdfBtn} onPress={() => generateAndPreview(item)} disabled={generatingId === item.id}>
-            {generatingId === item.id ? <ActivityIndicator color="#fff" /> : <Text style={styles.pdfBtnText}>Create PDF</Text>}
+            {generatingId === item.id ? <ActivityIndicator color="#fff" /> : <Text style={styles.pdfBtnText}>View report</Text>}
           </TouchableOpacity>
 
           <TouchableOpacity style={styles.deleteBtn} onPress={() => deleteHistory(item.id)}>
@@ -792,7 +792,7 @@ export default function Tab() {
               <Text style={styles.previewCloseText}>Close</Text>
             </TouchableOpacity>
             <TouchableOpacity onPress={savePreviewPdfLocally} style={[styles.previewClose, { marginRight: 8 }]} disabled={savingPdf}>
-              {savingPdf ? <ActivityIndicator /> : <Text style={{ color: '#0b62d6', fontWeight: '600' }}>Save</Text>}
+              {savingPdf ? <ActivityIndicator /> : <Text style={{ color: '#0b62d6', fontWeight: '600' }}>Save as PDF</Text>}
             </TouchableOpacity>
           </View>
         </View>
