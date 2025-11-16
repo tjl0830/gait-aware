@@ -29,13 +29,22 @@ type HistoryItem = {
   jointDeviations?: string;
   images?: string[]; // URIs
   createdAt: string;
+  pdfPath?: string; // local saved PDF path (file://...)
+  gender?: string;
+  age?: string;
+  notes?: string;
 };
 
 export default function Tab() {
+  // toggle whole form (name / gait / joint deviations / gender / age / notes / add image / save)
+  const [showForm, setShowForm] = useState(true);
   const [name, setName] = useState('');
   const [gaitType, setGaitType] = useState('');
+  const [gender, setGender] = useState('');
+  const [age, setAge] = useState('');
   const [jointDeviations, setJointDeviations] = useState('');
   const [selectedImages, setSelectedImages] = useState<string[]>([]);
+  const [notes, setNotes] = useState('');
   const [items, setItems] = useState<HistoryItem[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -189,6 +198,9 @@ export default function Tab() {
       name: trimmedName || 'Unknown',
       gaitType: trimmedGait || 'Unspecified',
       jointDeviations: jointDeviations.trim() || undefined,
+      gender: gender.trim() || undefined,
+      age: age.trim() || undefined,
+      notes: notes.trim() || undefined,
       images: selectedImages.length ? [...selectedImages] : undefined,
       createdAt: new Date().toISOString(),
     };
@@ -199,7 +211,10 @@ export default function Tab() {
     setGaitType('');
     setJointDeviations('');
     setSelectedImages([]);
-  }, [name, gaitType, jointDeviations, selectedImages, items]);
+    setGender('');
+    setAge('');
+    setNotes('');
+  }, [name, gaitType, jointDeviations, selectedImages, items, gender, age, notes]);
 
   async function deleteHistory(id: number) {
     Alert.alert('Delete entry', 'Delete this history entry?', [
@@ -248,27 +263,61 @@ export default function Tab() {
   }
 
   // ---------- PDF generation & preview ----------
+  // create PDF bytes. heavy work deferred to InteractionManager to avoid blocking UI
   async function createPdfBytes(item: HistoryItem) {
-    const [{ PDFDocument, StandardFonts }, base64js] = await Promise.all([
+    const [{ PDFDocument, StandardFonts, rgb }, base64js] = await Promise.all([
       import('pdf-lib'),
       import('base64-js').catch(() => null),
     ]);
 
     const pdfDoc = await (PDFDocument as any).create();
     const font = await (pdfDoc as any).embedFont(StandardFonts.Helvetica);
-    const page = (pdfDoc as any).addPage([612, 792]);
+    // try to load a bold variant; fallback to same font
+    let fontBold;
+    try {
+      // some pdf-lib builds expose Helvetica-Bold as StandardFonts.HelveticaBold
+      // if not available this will throw and we fallback to a simulated bold
+      // @ts-ignore
+      fontBold = await (pdfDoc as any).embedFont((StandardFonts as any).HelveticaBold ?? StandardFonts.Helvetica);
+    } catch {
+      fontBold = font;
+    }
+
+    const page = (pdfDoc as any).addPage([612, 792]); // US Letter
     const pageWidth = page.getWidth();
     const pageHeight = page.getHeight();
-    let y = pageHeight - 48;
+
     const margin = 48;
+    let y = pageHeight - margin;
+
     const maxContentWidth = pageWidth - margin * 2;
 
-    // Embed header image (gaitaware_header_text.png) at the top, high quality and fitted to width.
+    // helper: draw bold text (uses bold font if available, otherwise draws twice for weight)
+    const drawBold = (pg: any, text: string, x: number, yy: number, size: number) => {
+      if (fontBold !== font) {
+        pg.drawText(text, { x, y: yy, size, font: fontBold });
+      } else {
+        // simulate bold by drawing twice with tiny offset
+        pg.drawText(text, { x, y: yy, size, font });
+        pg.drawText(text, { x: x + 0.5, y: yy - 0.5, size, font });
+      }
+    };
+
+    // subtle color helpers
+    const gray = rgb ? rgb(0.45, 0.45, 0.45) : undefined;
+    const lightGray = rgb ? rgb(0.9, 0.9, 0.9) : undefined;
+
+    // small helper to draw a horizontal rule
+    const drawHr = (pg: any, fromX: number, toX: number, atY: number) => {
+      try {
+        pg.drawLine({ start: { x: fromX, y: atY }, end: { x: toX, y: atY }, thickness: 0.5, color: gray });
+      } catch {}
+    };
+
+    // --- Header logo (centered) ---
     try {
-      // dynamically load Expo Asset so bundler asset URIs are resolved
       // @ts-ignore
       const { Asset } = await import('expo-asset');
-      // correct relative path from app/(tabs)/history.tsx -> assets/images/...
       const moduleRef = require('../../assets/images/gaitaware_header_text.png');
       await Asset.loadAsync(moduleRef);
       const assetObj = Asset.fromModule(moduleRef);
@@ -277,33 +326,29 @@ export default function Tab() {
         const headerBytes = await loadImageBytes(headerUri);
         if (headerBytes) {
           const isPngHeader = headerBytes[0] === 0x89 && headerBytes[1] === 0x50;
-          let embeddedHeader = null;
+          let embeddedHeader: any = null;
           try {
             embeddedHeader = isPngHeader ? await (pdfDoc as any).embedPng(headerBytes) : await (pdfDoc as any).embedJpg(headerBytes);
           } catch {
             try {
               embeddedHeader = isPngHeader ? await (pdfDoc as any).embedJpg(headerBytes) : await (pdfDoc as any).embedPng(headerBytes);
-            } catch (hdrErr) {
-              console.warn('Header embed failed', hdrErr);
+            } catch (err) {
+              console.warn('header embed failed', err);
             }
           }
-
           if (embeddedHeader) {
-            // Fit header to content width without upscaling, limit height to make header smaller
             const hdrW = embeddedHeader.width ?? embeddedHeader.size?.width ?? 0;
             const hdrH = embeddedHeader.height ?? embeddedHeader.size?.height ?? 0;
-            const maxHeaderHeight = 48; // reduced header height (smaller)
+            const maxHeaderHeight = 40;
             let scale = 1;
             if (hdrW) scale = Math.min(1, maxContentWidth / hdrW);
             if (hdrH && hdrH * scale > maxHeaderHeight) scale = Math.min(scale, maxHeaderHeight / hdrH);
-
             const drawW = hdrW * scale;
             const drawH = hdrH * scale;
-            const drawX = (pageWidth - drawW) / 2; // center horizontally
+            const drawX = (pageWidth - drawW) / 2;
             const drawY = y - drawH;
             page.drawImage(embeddedHeader, { x: drawX, y: drawY, width: drawW, height: drawH });
-            // leave a larger gap under header so disclaimer is spaced further below
-            y = drawY - 20;
+            y = drawY - 22; // increased gap under header for better separation
           }
         }
       }
@@ -311,23 +356,20 @@ export default function Tab() {
       console.warn('Header image embed skipped', e);
     }
 
-    // Disclaimer below header: small, centered, readable
+    // --- Disclaimer (centered, small) ---
     try {
       const disclaimer = 'Disclaimer: The analysis results are for informational purposes only and are not clinical diagnoses. Consult a healthcare professional for clinical assessment.';
       const size = 10;
-      const maxWidth = maxContentWidth;
-
-      // simple word-wrap to fit maxWidth using embedded font metrics
-      function wrapTextToLines(text: string, fontObj: any, fontSize: number, maxW: number) {
+      const maxW = maxContentWidth;
+      function wrapText(text: string, f: any, s: number, mw: number) {
         const words = text.split(' ');
         const lines: string[] = [];
         let line = '';
         for (const w of words) {
           const test = line ? line + ' ' + w : w;
-          const testWidth = fontObj.widthOfTextAtSize(test, fontSize);
-          if (testWidth <= maxW) {
-            line = test;
-          } else {
+          const testWidth = f.widthOfTextAtSize(test, s);
+          if (testWidth <= mw) line = test;
+          else {
             if (line) lines.push(line);
             line = w;
           }
@@ -335,88 +377,187 @@ export default function Tab() {
         if (line) lines.push(line);
         return lines;
       }
-
-      const lines = wrapTextToLines(disclaimer, font, size, maxWidth);
+      const lines = wrapText(disclaimer, font, size, maxW);
       for (const ln of lines) {
         const textWidth = font.widthOfTextAtSize(ln, size);
         const x = (pageWidth - textWidth) / 2;
-        page.drawText(ln, { x, y, size, font });
+        page.drawText(ln, { x, y, size, font, color: gray });
         y -= size + 4;
       }
-      // small extra gap after disclaimer
-      y -= 6;
+      // larger gap between disclaimer and User Information as requested
+      y -= 28;
     } catch (e) {
       console.warn('Failed to draw disclaimer', e);
     }
 
-    const drawTextLine = (txt: string, size = 12) => {
-      page.drawText(txt, { x: margin, y, size, font });
-      y -= size + 6;
-    };
-
-    drawTextLine('GaitAware — Result', 16);
-    drawTextLine(`Name: ${item.name}`);
-    drawTextLine(`Gait type: ${item.gaitType}`);
-    if (item.jointDeviations) {
-      drawTextLine('');
-      drawTextLine('Joint deviations:');
-      const text = item.jointDeviations;
-      const approxCharsPerLine = 80;
-      for (let i = 0; i < text.length; i += approxCharsPerLine) {
-        drawTextLine(text.slice(i, i + approxCharsPerLine), 12);
-      }
+    if (y < 180) {
+      (pdfDoc as any).addPage([pageWidth, pageHeight]);
+      y = pageHeight - margin;
     }
-    drawTextLine('');
-    drawTextLine(`Recorded: ${new Date(item.createdAt).toLocaleString()}`);
 
-    // embed first image only (keeps PDF smaller) — fits to width, no upscaling
-    if (item.images && item.images.length) {
-      for (const imgUri of item.images) {
+    // --- User Information section (with uploaded image at left) ---
+    try {
+      // section title (bold)
+      const titleSize = 14;
+      drawBold(page, 'User Information', margin, y, titleSize);
+      y -= titleSize + 8;
+      drawHr(page, margin, pageWidth - margin, y + 6);
+      y -= 6;
+
+      // layout columns
+      const leftColWidth = 120;
+      const leftX = margin;
+      const rightX = margin + leftColWidth + 16;
+      const rightColWidth = pageWidth - rightX - margin;
+      let topY = y;
+
+      // draw a faint box background for the user info area for a professional look
+      const infoBoxHeight = 110;
+      try {
+        if (lightGray) page.drawRectangle({ x: margin - 4, y: y - infoBoxHeight + 8, width: pageWidth - margin * 2 + 8, height: infoBoxHeight, color: lightGray, opacity: 0.15 });
+      } catch {}
+
+      // user uploaded image (left column)
+      if (item.images && item.images.length) {
         try {
-          const imgBytes = await loadImageBytes(imgUri);
-          if (!imgBytes) continue;
-
-          const isPng = imgBytes[0] === 0x89 && imgBytes[1] === 0x50;
-          let embeddedImage;
-          try {
-            embeddedImage = isPng ? await (pdfDoc as any).embedPng(imgBytes) : await (pdfDoc as any).embedJpg(imgBytes);
-          } catch {
+          const userImageUri = item.images[0];
+          const imgBytes = await loadImageBytes(userImageUri);
+          if (imgBytes) {
+            const isPng = imgBytes[0] === 0x89 && imgBytes[1] === 0x50;
+            let embedImg: any = null;
             try {
-              embeddedImage = isPng ? await (pdfDoc as any).embedJpg(imgBytes) : await (pdfDoc as any).embedPng(imgBytes);
-            } catch (e) {
-              console.warn('embed fallback failed', e);
-              continue;
+              embedImg = isPng ? await (pdfDoc as any).embedPng(imgBytes) : await (pdfDoc as any).embedJpg(imgBytes);
+            } catch {
+              try {
+                embedImg = isPng ? await (pdfDoc as any).embedJpg(imgBytes) : await (pdfDoc as any).embedPng(imgBytes);
+              } catch (e) {
+                console.warn('user image embed failed', e);
+                embedImg = null;
+              }
+            }
+            if (embedImg) {
+              const iw = embedImg.width ?? embedImg.size?.width ?? 0;
+              const ih = embedImg.height ?? embedImg.size?.height ?? 0;
+              const scale = iw ? Math.min(1, leftColWidth / iw) : 1;
+              const drawW = iw * scale;
+              const drawH = ih * scale;
+              const drawY = topY - drawH;
+              page.drawImage(embedImg, { x: leftX, y: drawY, width: drawW, height: drawH });
             }
           }
-
-          const imgWidth = embeddedImage.width ?? embeddedImage.size?.width ?? 0;
-          const imgHeight = embeddedImage.height ?? embeddedImage.size?.height ?? 0;
-          const maxW = maxContentWidth;
-          const scaleW = imgWidth ? Math.min(1, maxW / imgWidth) : 1;
-          const scale = scaleW;
-          const drawW = imgWidth * scale;
-          const drawH = imgHeight * scale;
-
-          if (y - drawH < margin) {
-            const p = (pdfDoc as any).addPage([pageWidth, pageHeight]);
-            y = pageHeight - margin;
-            p.drawImage(embeddedImage, { x: margin, y: y - drawH, width: drawW, height: drawH });
-            y -= drawH + 12;
-          } else {
-            page.drawImage(embeddedImage, { x: margin, y: y - drawH, width: drawW, height: drawH });
-            y -= drawH + 12;
-          }
         } catch (e) {
-          console.warn('image embed failed', e);
-          continue;
+          console.warn('user image section error', e);
         }
       }
+
+      // right column: labels bold, values normal
+      const labelSize = 11;
+      const valueSize = 11;
+      let cursorY = topY - 4;
+      drawBold(page, 'Name:', rightX, cursorY, labelSize);
+      page.drawText(` ${item.name ?? '—'}`, { x: rightX + 44, y: cursorY, size: valueSize, font, color: gray });
+      cursorY -= labelSize + 6;
+
+      drawBold(page, 'Gender:', rightX, cursorY, labelSize);
+      page.drawText(` ${item.gender ?? '—'}`, { x: rightX + 56, y: cursorY, size: valueSize, font, color: gray });
+      cursorY -= labelSize + 6;
+
+      drawBold(page, 'Age:', rightX, cursorY, labelSize);
+      page.drawText(` ${item.age ?? '—'}`, { x: rightX + 32, y: cursorY, size: valueSize, font, color: gray });
+      cursorY -= labelSize + 8;
+
+      drawBold(page, 'Notes:', rightX, cursorY, labelSize);
+      cursorY -= labelSize + 4;
+      // wrap notes into rightColWidth
+      const wrap = (text: string, f: any, s: number, mw: number) => {
+        const words = text.split(' ');
+        const lines: string[] = [];
+        let line = '';
+        for (const w of words) {
+          const test = line ? `${line} ${w}` : w;
+          const width = f.widthOfTextAtSize(test, s);
+          if (width <= mw) line = test;
+          else {
+            if (line) lines.push(line);
+            line = w;
+          }
+        }
+        if (line) lines.push(line);
+        return lines;
+      };
+      const noteLines = wrap(item.notes ?? '—', font, valueSize, rightColWidth);
+      for (const ln of noteLines) {
+        page.drawText(ln, { x: rightX, y: cursorY, size: valueSize, font, color: gray });
+        cursorY -= valueSize + 4;
+      }
+
+      // move y below user info box
+      y = y - infoBoxHeight - 8;
+    } catch (e) {
+      console.warn('User info section failed', e);
     }
 
-    const pdfBytes: Uint8Array = await pdfDoc.save();
-    const b64 = await bytesToBase64(pdfBytes);
-    if (!b64) throw new Error('Failed to encode PDF to base64');
-    return b64;
+    // --- Analysis Results (gait classification + detected potential joint abnormalities) ---
+    try {
+      const sectionTitleSize = 14;
+      drawBold(page, 'Analysis Results', margin, y, sectionTitleSize);
+      y -= sectionTitleSize + 8;
+      drawHr(page, margin, pageWidth - margin, y + 6);
+      y -= 6;
+
+      // Gait classification (label bold)
+      drawBold(page, 'Gait classification:', margin, y, 12);
+      page.drawText(` ${item.gaitType ?? '—'}`, { x: margin + 120, y, size: 12, font, color: gray });
+      y -= 20;
+
+      // Detected potential joint abnormalities
+      drawBold(page, 'Detected potential joint abnormalities:', margin, y, 12);
+      y -= 16;
+
+      const abnormalitiesText = item.jointDeviations ? item.jointDeviations : 'None detected';
+      const abLines = (() => {
+        const words = abnormalitiesText.split(' ');
+        const lines: string[] = [];
+        let line = '';
+        const maxW = maxContentWidth;
+        for (const w of words) {
+          const test = line ? `${line} ${w}` : w;
+          const width = font.widthOfTextAtSize(test, 11);
+          if (width <= maxW) line = test;
+          else {
+            if (line) lines.push(line);
+            line = w;
+          }
+        }
+        if (line) lines.push(line);
+        return lines;
+      })();
+
+      for (const ln of abLines) {
+        page.drawText('•', { x: margin + 2, y, size: 11, font });
+        page.drawText(ln, { x: margin + 12, y, size: 11, font, color: gray });
+        y -= 16;
+        if (y < margin + 80) {
+          (pdfDoc as any).addPage([pageWidth, pageHeight]);
+          y = pageHeight - margin;
+        }
+      }
+    } catch (e) {
+      console.warn('Analysis section failed', e);
+    }
+
+    // final save
+    const pdfBytes: Uint8Array = await (pdfDoc as any).save();
+    // convert to base64
+    try {
+      if (base64js && base64js.fromByteArray) return base64js.fromByteArray(pdfBytes);
+    } catch {}
+    try {
+      // @ts-ignore
+      return Buffer.from(pdfBytes).toString('base64');
+    } catch (err) {
+      throw new Error('Base64 conversion failed');
+    }
   }
 
   async function generateAndPreview(item: HistoryItem) {
@@ -581,38 +722,40 @@ export default function Tab() {
 
   // ---------- main render ----------
   return (
-    <KeyboardAvoidingView style={styles.container} behavior={Platform.select({ ios: 'padding', android: undefined })}>
-      <View style={styles.headerRow}>
-        <Text style={styles.headingCompact}>History</Text>
-      </View>
-
+    <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.container}>
       <View style={styles.form}>
-        <TextInput placeholder="Name" value={name} onChangeText={setName} style={styles.input} placeholderTextColor="#666" />
-        <TextInput placeholder="Gait type" value={gaitType} onChangeText={setGaitType} style={styles.input} placeholderTextColor="#666" />
-        <TextInput placeholder="Joint deviations / notes" value={jointDeviations} onChangeText={setJointDeviations} style={[styles.input, styles.noteInput]} placeholderTextColor="#666" multiline />
-
-        <View style={styles.imagePickerRow}>
-          <TouchableOpacity style={styles.addImageBtn} onPress={pickImage}>
-            <Text style={styles.addImageText}>{selectedImages.length ? 'Replace Image' : 'Add Image'}</Text>
-          </TouchableOpacity>
-
-          <View style={styles.selectedImagesRow}>
-            {selectedImages.map((uri, idx) => (
-              <View key={`${uri}-${idx}`} style={styles.selectedImageWrap}>
-                <Image source={{ uri }} style={styles.selectedThumb} />
-                <TouchableOpacity style={styles.removeImageBtn} onPress={() => removeSelectedImage(uri)}>
-                  <Text style={styles.removeImageText}>×</Text>
-                </TouchableOpacity>
-              </View>
-            ))}
-          </View>
-        </View>
-
-        <TouchableOpacity style={styles.addBtn} onPress={addHistory}>
-          <Text style={styles.addBtnText}>Save</Text>
+        {/* global toggle to show/hide all inputs and action buttons */}
+        <TouchableOpacity onPress={() => setShowForm(s => !s)} style={{ alignSelf: 'flex-start', padding: 8, backgroundColor: '#eee', borderRadius: 6, marginBottom: 10 }}>
+          <Text style={{ fontSize: 14 }}>{showForm ? 'Hide inputs' : 'Show inputs'}</Text>
         </TouchableOpacity>
-      </View>
 
+        {showForm && (
+          <>
+             <TextInput placeholder="Name" value={name} onChangeText={setName} style={styles.input} placeholderTextColor="#666" />
+             <TextInput placeholder="Gait type" value={gaitType} onChangeText={setGaitType} style={styles.input} placeholderTextColor="#666" />
+             <TextInput placeholder="Joint deviations / analysis" value={jointDeviations} onChangeText={setJointDeviations} style={[styles.input, styles.noteInput]} placeholderTextColor="#666" multiline />
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: 8 }}>
+              <TextInput placeholder="Gender" value={gender} onChangeText={setGender} style={[styles.input, { flex: 1, marginRight: 8 }]} placeholderTextColor="#666" />
+              <TextInput placeholder="Age" value={age} onChangeText={setAge} style={[styles.input, { width: 100 }]} placeholderTextColor="#666" keyboardType="numeric" />
+            </View>
+            <TextInput placeholder="Notes" value={notes} onChangeText={setNotes} style={[styles.input, styles.noteInput, { marginTop: 8 }]} placeholderTextColor="#666" multiline />
+
+            <View style={{ flexDirection: 'row', marginTop: 10, alignItems: 'center' }}>
+              <TouchableOpacity onPress={pickImage} style={[styles.actionBtn, { marginRight: 8 }]}>
+                <Text style={styles.actionBtnText}>Add image</Text>
+              </TouchableOpacity>
+              <TouchableOpacity onPress={addHistory} style={[styles.primaryBtn]}>
+                <Text style={styles.primaryBtnText}>Save</Text>
+              </TouchableOpacity>
+            </View>
+          </>
+        )}
+       </View>
+ 
+       {/* Analysis History header */}
+      <Text style={styles.analysisHeader}>Analysis History</Text>
+
+       {/* rest of screen (history list, modal, etc.) */}
       <FlatList data={items} keyExtractor={i => i.id.toString()} renderItem={renderItem} contentContainerStyle={styles.list} ListEmptyComponent={<Text style={styles.empty}>{loading ? 'Loading...' : 'No history yet'}</Text>} />
 
       <Modal visible={previewVisible} animationType="slide" onRequestClose={() => setPreviewVisible(false)}>
@@ -682,4 +825,19 @@ const styles = StyleSheet.create({
   previewFallbackText: { color: '#333', textAlign: 'center', marginBottom: 16 },
   openExternBtn: { backgroundColor: '#0b62d6', paddingHorizontal: 16, paddingVertical: 10, borderRadius: 6 },
   openExternText: { color: '#fff', fontWeight: '600' },
+
+  actionBtn: { backgroundColor: '#0b62d6', paddingVertical: 10, paddingHorizontal: 16, borderRadius: 6, alignItems: 'center' },
+  actionBtnText: { color: '#fff', fontWeight: '600' },
+
+  primaryBtn: { backgroundColor: '#0066cc', paddingVertical: 10, borderRadius: 6, alignItems: 'center' },
+  primaryBtnText: { color: '#fff', fontWeight: '600' },
+
+  analysisHeader: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#222',
+    marginHorizontal: 16,
+    marginTop: 8,
+    marginBottom: 6,
+  },
 });
