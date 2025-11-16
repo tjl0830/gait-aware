@@ -506,7 +506,7 @@ export default function Tab() {
       y -= 6;
 
       // Gait classification (label bold)
-      drawBold(page, 'Gait classification:', margin, y, 12);
+      drawBold(page, 'Gait classification:', margin, y, 14);
       page.drawText(` ${item.gaitType ?? '—'}`, { x: margin + 120, y, size: 12, font, color: gray });
       y -= 20;
 
@@ -658,9 +658,36 @@ export default function Tab() {
       <style>html,body{height:100%;margin:0;padding:0}#viewer{width:100%;}canvas{display:block;margin:8px auto;max-width:100%;height:auto;}</style>
       <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.min.js"></script>
       </head><body><div id="viewer"></div><script>
-      (function(){const b='${b64}';function b64ToUint8Array(s){const t=atob(s);const u=new Uint8Array(t.length);for(let i=0;i<t.length;i++)u[i]=t.charCodeAt(i);return u;}
-      pdfjsLib.GlobalWorkerOptions.workerSrc='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.worker.min.js';
-      pdfjsLib.getDocument({data:b64ToUint8Array(b)}).promise.then(function(pdf){const viewer=document.getElementById('viewer');for(let p=1;p<=pdf.numPages;p++){pdf.getPage(p).then(function(page){const scale=Math.min(window.innerWidth/page.getViewport({scale:1}).width,1.6);const vp=page.getViewport({scale});const canvas=document.createElement('canvas');const ctx=canvas.getContext('2d');canvas.width=vp.width;canvas.height=vp.height;viewer.appendChild(canvas);page.render({canvasContext:ctx,viewport:vp});});}}).catch(function(err){document.body.innerHTML='<div style="padding:20px;color:#900">Failed to load PDF: '+(err.message||err)+'</div>';});
+      (function(){
+        const b='${b64}';
+        function b64ToUint8Array(s){const t=atob(s);const u=new Uint8Array(t.length);for(let i=0;i<t.length;i++)u[i]=t.charCodeAt(i);return u;}
+        pdfjsLib.GlobalWorkerOptions.workerSrc='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.worker.min.js';
+        const data = b64ToUint8Array(b);
+        pdfjsLib.getDocument({data}).promise.then(async function(pdf){
+          const viewer=document.getElementById('viewer');
+          for(let p=1;p<=pdf.numPages;p++){
+            const page = await pdf.getPage(p);
+            // base scale to fit width (remove or raise cap if you want larger renders)
+            const baseVp = page.getViewport({scale:1});
+            const fitScale = Math.min(window.innerWidth / baseVp.width, 1.6);
+            const outputScale = window.devicePixelRatio || 1;
+            const vp = page.getViewport({scale: fitScale * outputScale});
+            const canvas = document.createElement('canvas');
+            const ctx = canvas.getContext('2d');
+            if(!ctx){ continue; }
+            // set high-res backing store size and CSS display size
+            canvas.width = Math.floor(vp.width);
+            canvas.height = Math.floor(vp.height);
+            canvas.style.width = Math.floor(vp.width / outputScale) + 'px';
+            canvas.style.height = Math.floor(vp.height / outputScale) + 'px';
+            viewer.appendChild(canvas);
+            // Optional: improve sharpness when drawing scaled bitmaps
+            ctx.imageSmoothingEnabled = true;
+            await page.render({ canvasContext: ctx, viewport: vp }).promise;
+          }
+        }).catch(function(err){
+          document.body.innerHTML='<div style="padding:20px;color:#900">Failed to load PDF: '+(err.message||err)+'</div>';
+        });
       })();
       </script></body></html>
     `;
