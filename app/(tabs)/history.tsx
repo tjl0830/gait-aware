@@ -263,6 +263,92 @@ export default function Tab() {
     const margin = 48;
     const maxContentWidth = pageWidth - margin * 2;
 
+    // Embed header image (gaitaware_header_text.png) at the top, high quality and fitted to width.
+    try {
+      // dynamically load Expo Asset so bundler asset URIs are resolved
+      // @ts-ignore
+      const { Asset } = await import('expo-asset');
+      // correct relative path from app/(tabs)/history.tsx -> assets/images/...
+      const moduleRef = require('../../assets/images/gaitaware_header_text.png');
+      await Asset.loadAsync(moduleRef);
+      const assetObj = Asset.fromModule(moduleRef);
+      const headerUri = assetObj.localUri ?? assetObj.uri;
+      if (headerUri) {
+        const headerBytes = await loadImageBytes(headerUri);
+        if (headerBytes) {
+          const isPngHeader = headerBytes[0] === 0x89 && headerBytes[1] === 0x50;
+          let embeddedHeader = null;
+          try {
+            embeddedHeader = isPngHeader ? await (pdfDoc as any).embedPng(headerBytes) : await (pdfDoc as any).embedJpg(headerBytes);
+          } catch {
+            try {
+              embeddedHeader = isPngHeader ? await (pdfDoc as any).embedJpg(headerBytes) : await (pdfDoc as any).embedPng(headerBytes);
+            } catch (hdrErr) {
+              console.warn('Header embed failed', hdrErr);
+            }
+          }
+
+          if (embeddedHeader) {
+            // Fit header to content width without upscaling, limit height to make header smaller
+            const hdrW = embeddedHeader.width ?? embeddedHeader.size?.width ?? 0;
+            const hdrH = embeddedHeader.height ?? embeddedHeader.size?.height ?? 0;
+            const maxHeaderHeight = 48; // reduced header height (smaller)
+            let scale = 1;
+            if (hdrW) scale = Math.min(1, maxContentWidth / hdrW);
+            if (hdrH && hdrH * scale > maxHeaderHeight) scale = Math.min(scale, maxHeaderHeight / hdrH);
+
+            const drawW = hdrW * scale;
+            const drawH = hdrH * scale;
+            const drawX = (pageWidth - drawW) / 2; // center horizontally
+            const drawY = y - drawH;
+            page.drawImage(embeddedHeader, { x: drawX, y: drawY, width: drawW, height: drawH });
+            // leave a larger gap under header so disclaimer is spaced further below
+            y = drawY - 20;
+          }
+        }
+      }
+    } catch (e) {
+      console.warn('Header image embed skipped', e);
+    }
+
+    // Disclaimer below header: small, centered, readable
+    try {
+      const disclaimer = 'Disclaimer: The analysis results are for informational purposes only and are not clinical diagnoses. Consult a healthcare professional for clinical assessment.';
+      const size = 10;
+      const maxWidth = maxContentWidth;
+
+      // simple word-wrap to fit maxWidth using embedded font metrics
+      function wrapTextToLines(text: string, fontObj: any, fontSize: number, maxW: number) {
+        const words = text.split(' ');
+        const lines: string[] = [];
+        let line = '';
+        for (const w of words) {
+          const test = line ? line + ' ' + w : w;
+          const testWidth = fontObj.widthOfTextAtSize(test, fontSize);
+          if (testWidth <= maxW) {
+            line = test;
+          } else {
+            if (line) lines.push(line);
+            line = w;
+          }
+        }
+        if (line) lines.push(line);
+        return lines;
+      }
+
+      const lines = wrapTextToLines(disclaimer, font, size, maxWidth);
+      for (const ln of lines) {
+        const textWidth = font.widthOfTextAtSize(ln, size);
+        const x = (pageWidth - textWidth) / 2;
+        page.drawText(ln, { x, y, size, font });
+        y -= size + 4;
+      }
+      // small extra gap after disclaimer
+      y -= 6;
+    } catch (e) {
+      console.warn('Failed to draw disclaimer', e);
+    }
+
     const drawTextLine = (txt: string, size = 12) => {
       page.drawText(txt, { x: margin, y, size, font });
       y -= size + 6;
