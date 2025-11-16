@@ -3,6 +3,7 @@ import {
   ActivityIndicator,
   Alert,
   FlatList,
+  Image,
   KeyboardAvoidingView,
   Platform,
   StyleSheet,
@@ -12,17 +13,20 @@ import {
   View,
 } from 'react-native';
 
-// NOTE: AsyncStorage, FileSystem and Sharing are loaded dynamically to avoid bundler errors if not installed.
-// Install recommended packages with the commands shown above for full functionality.
+// NOTE: AsyncStorage, FileSystem, Sharing and ImagePicker are loaded dynamically to avoid bundler errors if not installed.
+// Recommended installs for full functionality:
+// npx expo install expo-file-system expo-sharing @react-native-async-storage/async-storage expo-image-picker
+// npm install pdf-lib base64-js
 
 const STORAGE_KEY = 'gaitaware:history';
 
-// simple shape for stored items
+// simple shape for stored items (now includes images)
 type HistoryItem = {
   id: number;
   name: string;
   gaitType: string;
   jointDeviations?: string;
+  images?: string[]; // URIs
   createdAt: string;
 };
 
@@ -30,6 +34,7 @@ export default function Tab() {
   const [name, setName] = useState('');
   const [gaitType, setGaitType] = useState('');
   const [jointDeviations, setJointDeviations] = useState('');
+  const [selectedImages, setSelectedImages] = useState<string[]>([]); // images chosen before saving
   const [items, setItems] = useState<HistoryItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [generatingId, setGeneratingId] = useState<number | null>(null);
@@ -97,6 +102,7 @@ export default function Tab() {
       name: trimmedName || 'Unknown',
       gaitType: trimmedGait || 'Unspecified',
       jointDeviations: jointDeviations.trim() || undefined,
+      images: selectedImages.length ? [...selectedImages] : undefined,
       createdAt: new Date().toISOString(),
     };
     const next = [item, ...items];
@@ -105,6 +111,7 @@ export default function Tab() {
     setName('');
     setGaitType('');
     setJointDeviations('');
+    setSelectedImages([]);
   }
 
   async function deleteHistory(id: number) {
@@ -122,7 +129,46 @@ export default function Tab() {
     ]);
   }
 
-  // Generate PDF, save to device (documentDirectory) and share
+  // Image picker: pick one image (robust handling for different SDKs)
+  async function pickImage() {
+    try {
+      // dynamic import to avoid bundler errors if expo-image-picker not installed
+      // @ts-ignore
+      const ImagePicker = await import('expo-image-picker');
+      const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      const granted = permission.granted ?? (permission.status === 'granted');
+      if (!granted) {
+        Alert.alert('Permission required', 'Gallery permission is required to pick images.');
+        return;
+      }
+
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        quality: 0.6,
+        allowsEditing: false,
+      });
+
+      // support both old and new result shapes:
+      // new: { canceled: boolean, assets: [{ uri }] }
+      // old: { cancelled: boolean, uri }
+      const canceled = (result as any).canceled ?? (result as any).cancelled ?? false;
+      const uri = (result as any).assets?.[0]?.uri ?? (result as any).uri ?? null;
+
+      if (!canceled && uri) {
+        // keep single test image (replace previous)
+        setSelectedImages([uri]);
+      }
+    } catch (e) {
+      console.warn('pickImage error', e);
+      Alert.alert('Unavailable', 'Image picker not available. Install expo-image-picker for full functionality.');
+    }
+  }
+
+  function removeSelectedImage(uri: string) {
+    setSelectedImages(prev => prev.filter(u => u !== uri));
+  }
+
+  // Generate PDF, include images where possible, save to device and share
   async function generateAndSharePdf(item: HistoryItem) {
     setGeneratingId(item.id);
     try {
@@ -132,7 +178,6 @@ export default function Tab() {
         import('base64-js').catch(() => null),
       ]);
 
-      // create PDF
       const pdfDoc = await (PDFDocument as any).create();
       const font = await (pdfDoc as any).embedFont(StandardFonts.Helvetica);
       const page = (pdfDoc as any).addPage([612, 792]);
@@ -147,8 +192,8 @@ export default function Tab() {
       line(`Name: ${item.name}`);
       line(`Gait type: ${item.gaitType}`);
       if (item.jointDeviations) {
+        line('');
         line('Joint deviations:');
-        // wrap simple
         const text = item.jointDeviations;
         const approxCharsPerLine = 80;
         for (let i = 0; i < text.length; i += approxCharsPerLine) {
@@ -158,14 +203,77 @@ export default function Tab() {
       line('');
       line(`Recorded: ${new Date(item.createdAt).toLocaleString()}`);
 
+      // try to embed images (one or more) below the text if present
+      if (item.images && item.images.length) {
+        // dynamic file system
+        let FileSystem: any = null;
+        try {
+          // @ts-ignore
+          FileSystem = await import('expo-file-system');
+        } catch {
+          FileSystem = null;
+        }
+
+        for (const imgUri of item.images) {
+          try {
+            let imgBytes: Uint8Array | null = null;
+
+            if (FileSystem && FileSystem.readAsStringAsync) {
+              // read as base64 then convert
+              // Some URIs may be remote (http). For remote URIs, fetch is used.
+              if (imgUri.startsWith('http')) {
+                const resp = await fetch(imgUri);
+                const arr = new Uint8Array(await resp.arrayBuffer());
+                imgBytes = arr;
+              } else {
+                // file:// or content:// -- try readAsStringAsync
+                const b64 = await FileSystem.readAsStringAsync(imgUri, { encoding: FileSystem.EncodingType.Base64 });
+                const base64js = await import('base64-js');
+                imgBytes = base64js.toByteArray(b64);
+              }
+            } else {
+              // fallback: try fetch for bundled or remote URIs
+              const resp = await fetch(imgUri);
+              const arr = new Uint8Array(await resp.arrayBuffer());
+              imgBytes = arr;
+            }
+
+            if (imgBytes) {
+              // try to detect PNG vs JPG by data header
+              const isPng = imgBytes[0] === 0x89 && imgBytes[1] === 0x50;
+              let embeddedImage;
+              if (isPng) {
+                embeddedImage = await (pdfDoc as any).embedPng(imgBytes);
+              } else {
+                embeddedImage = await (pdfDoc as any).embedJpg(imgBytes);
+              }
+              const imgDims = embeddedImage.scale(0.5);
+              // place image; if not enough vertical space, add new page
+              if (y - imgDims.height < 48) {
+                // add new page
+                const p = (pdfDoc as any).addPage([612, 792]);
+                y = 792 - 48;
+                p.drawImage(embeddedImage, { x: 48, y: y - imgDims.height, width: imgDims.width, height: imgDims.height });
+                y -= imgDims.height + 12;
+              } else {
+                page.drawImage(embeddedImage, { x: 48, y: y - imgDims.height, width: imgDims.width, height: imgDims.height });
+                y -= imgDims.height + 12;
+              }
+            }
+          } catch (e) {
+            console.warn('embed image failed', e);
+            // continue with other images
+          }
+        }
+      }
+
       const pdfBytes: Uint8Array = await pdfDoc.save();
 
-      // convert to base64
+      // convert to base64 for saving
       let b64 = '';
       if (base64js && base64js.fromByteArray) {
         b64 = base64js.fromByteArray(pdfBytes);
       } else {
-        // fallback: use Buffer if available (node polyfills may be present)
         try {
           // @ts-ignore
           b64 = Buffer.from(pdfBytes).toString('base64');
@@ -236,8 +344,19 @@ export default function Tab() {
 
   function renderItem({ item }: { item: HistoryItem }) {
     const dateLabel = new Date(item.createdAt).toLocaleString();
+    const thumbUri = item.images && item.images.length ? item.images[0] : null;
     return (
       <View style={styles.row}>
+        <View style={styles.leftImageSlot}>
+          {thumbUri ? (
+            <Image source={{ uri: thumbUri }} style={styles.thumb} />
+          ) : (
+            <View style={styles.placeholder}>
+              <Text style={styles.placeholderText}>No Image</Text>
+            </View>
+          )}
+        </View>
+
         <View style={styles.rowLeft}>
           <Text style={styles.name}>{item.name}</Text>
           <Text style={styles.gaitType}>{item.gaitType}</Text>
@@ -283,6 +402,24 @@ export default function Tab() {
           placeholderTextColor="#666"
           multiline
         />
+
+        <View style={styles.imagePickerRow}>
+          <TouchableOpacity style={styles.addImageBtn} onPress={pickImage}>
+            <Text style={styles.addImageText}>{selectedImages.length ? 'Replace Image (tester)' : 'Add Image (tester)'}</Text>
+          </TouchableOpacity>
+
+          <View style={styles.selectedImagesRow}>
+            {selectedImages.map((uri, idx) => (
+              <View key={`${uri ?? 'img'}-${idx}`} style={styles.selectedImageWrap}>
+                <Image source={{ uri }} style={styles.selectedThumb} />
+                <TouchableOpacity style={styles.removeImageBtn} onPress={() => removeSelectedImage(uri)}>
+                  <Text style={styles.removeImageText}>×</Text>
+                </TouchableOpacity>
+              </View>
+            ))}
+          </View>
+        </View>
+
         <TouchableOpacity style={styles.addBtn} onPress={addHistory}>
           <Text style={styles.addBtnText}>Save</Text>
         </TouchableOpacity>
@@ -300,7 +437,7 @@ export default function Tab() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, paddingTop: 24 },
+  container: { flex: 1, backgroundColor: '#fff', paddingTop: 24 },
   headerRow: {
     paddingHorizontal: 20,
     paddingVertical: 8,
@@ -319,6 +456,7 @@ const styles = StyleSheet.create({
     marginHorizontal: 12,
     borderRadius: 8,
     marginBottom: 12,
+    backgroundColor: '#fafafa',
   },
   input: {
     fontSize: 16,
@@ -332,6 +470,16 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   noteInput: { minHeight: 60, textAlignVertical: 'top' },
+
+  imagePickerRow: { flexDirection: 'column', marginBottom: 8 },
+  addImageBtn: { backgroundColor: '#eef6ff', paddingHorizontal: 12, paddingVertical: 8, borderRadius: 8, alignSelf: 'flex-start' },
+  addImageText: { color: '#0b62d6', fontWeight: '600' },
+  selectedImagesRow: { flexDirection: 'row', marginTop: 8, flexWrap: 'wrap' },
+  selectedImageWrap: { marginRight: 8, marginBottom: 8, position: 'relative' },
+  selectedThumb: { width: 64, height: 64, borderRadius: 6, borderWidth: 1, borderColor: '#ddd' },
+  removeImageBtn: { position: 'absolute', top: -6, right: -6, backgroundColor: '#d00', width: 22, height: 22, borderRadius: 11, justifyContent: 'center', alignItems: 'center' },
+  removeImageText: { color: '#fff', fontWeight: '700' },
+
   addBtn: { marginTop: 6, backgroundColor: '#0066cc', paddingVertical: 12, borderRadius: 8, alignItems: 'center' },
   addBtnText: { color: '#fff', fontSize: 16, fontWeight: '600' },
 
@@ -347,6 +495,11 @@ const styles = StyleSheet.create({
     borderColor: '#eee',
     alignItems: 'flex-start',
   },
+  leftImageSlot: { width: 72, alignItems: 'center', justifyContent: 'center', marginRight: 12 },
+  thumb: { width: 64, height: 64, borderRadius: 6 },
+  placeholder: { width: 64, height: 64, borderRadius: 6, backgroundColor: '#f3f3f3', borderWidth: 1, borderColor: '#eee', justifyContent: 'center', alignItems: 'center' },
+  placeholderText: { color: '#999', fontSize: 11 },
+
   rowLeft: { flex: 1 },
   rowRight: { justifyContent: 'center', alignItems: 'flex-end' },
   name: { fontSize: 16, fontWeight: '700' },
