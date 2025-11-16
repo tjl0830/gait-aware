@@ -776,7 +776,7 @@ export default function Tab() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#fff', paddingTop: 24 },
+  container: { flex: 1, paddingTop: 24 },
   headerRow: { paddingHorizontal: 20, paddingVertical: 8, marginBottom: 6, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', borderBottomWidth: 1, borderBottomColor: '#eee' },
   headingCompact: { fontSize: 18, fontWeight: '700', color: '#000' },
 
@@ -797,7 +797,7 @@ const styles = StyleSheet.create({
   addBtnText: { color: '#fff', fontSize: 16, fontWeight: '600' },
 
   list: { paddingHorizontal: 12, paddingBottom: 48 },
-  row: { flexDirection: 'row', padding: 12, backgroundColor: '#fff', borderRadius: 8, marginBottom: 10, marginHorizontal: 8, borderWidth: 1, borderColor: '#eee', alignItems: 'flex-start' },
+  row: { flexDirection: 'row', padding: 12, backgroundColor: '#fff', borderColor: '#a1a1a1ff', borderRadius: 8, marginBottom: 10, marginHorizontal: 8, borderWidth: 1.5, alignItems: 'flex-start' },
   leftImageSlot: { width: 72, alignItems: 'center', justifyContent: 'center', marginRight: 12 },
   thumb: { width: 64, height: 64, borderRadius: 6 },
   placeholder: { width: 64, height: 64, borderRadius: 6, backgroundColor: '#f3f3f3', borderWidth: 1, borderColor: '#eee', justifyContent: 'center', alignItems: 'center' },
@@ -805,10 +805,10 @@ const styles = StyleSheet.create({
 
   rowLeft: { flex: 1 },
   rowRight: { justifyContent: 'center', alignItems: 'flex-end' },
-  name: { fontSize: 16, fontWeight: '700' },
-  gaitType: { fontSize: 15, color: '#333', marginTop: 4 },
-  note: { fontSize: 14, color: '#333', marginTop: 6 },
-  date: { fontSize: 12, color: '#666', marginTop: 8 },
+  name: { fontSize: 18, fontWeight: '700' },
+  gaitType: { fontSize: 17, color: '#333', marginTop: 4 },
+  note: { fontSize: 16, color: '#333', marginTop: 2 },
+  date: { fontSize: 14, color: '#666', marginTop: 9 },
 
   pdfBtn: { backgroundColor: '#0b62d6', paddingHorizontal: 10, paddingVertical: 8, borderRadius: 6, marginBottom: 8 },
   pdfBtnText: { color: '#fff', fontWeight: '600' },
@@ -833,11 +833,11 @@ const styles = StyleSheet.create({
   primaryBtnText: { color: '#fff', fontWeight: '600' },
 
   analysisHeader: {
-    fontSize: 18,
+    fontSize: 24,
     fontWeight: '700',
     color: '#222',
     marginHorizontal: 16,
     marginTop: 8,
-    marginBottom: 6,
+    marginBottom: 14,
   },
 });
