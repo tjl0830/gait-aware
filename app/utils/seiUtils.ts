@@ -1,4 +1,5 @@
 import * as FileSystem from 'expo-file-system/legacy';
+import * as ImageManipulator from 'expo-image-manipulator';
 
 /**
  * Minimal PNG encoder for grayscale images (based on UPNG.js approach).
@@ -766,18 +767,38 @@ export async function generateSeiFromPoseJson(jsonUri: string, outBaseName?: str
     pixels[i] = Math.round(clamp(v, 0, 255));
   }
 
-  // Encode to PNG
+  // Encode to PNG first (in memory)
   console.log('Encoding PNG:', size, 'x', size, 'pixels');
   const pngBase64 = encodePNG(pixels, size, size);
   console.log('PNG base64 length:', pngBase64.length);
 
-  // save
+  // save PNG to temp file first
   const baseName = outBaseName ?? 'sei';
   const seisDir = `${FileSystem.documentDirectory}seis`;
   await FileSystem.makeDirectoryAsync(seisDir, { intermediates: true });
-  const outputFile = `${seisDir}/${baseName}_sei.png`;
-  await FileSystem.writeAsStringAsync(outputFile, pngBase64, { encoding: FileSystem.EncodingType.Base64 });
+  const tempPngFile = `${seisDir}/${baseName}_sei_temp.png`;
+  await FileSystem.writeAsStringAsync(tempPngFile, pngBase64, { encoding: FileSystem.EncodingType.Base64 });
 
-  return { png: pngBase64, path: outputFile };
+  // Convert to JPEG using ImageManipulator
+  console.log('Converting PNG to JPEG...');
+  const result = await ImageManipulator.manipulateAsync(
+    tempPngFile,
+    [], // no manipulations, just conversion
+    { compress: 1, format: ImageManipulator.SaveFormat.JPEG }
+  );
+
+  // Delete temp PNG file
+  await FileSystem.deleteAsync(tempPngFile, { idempotent: true });
+
+  // Read JPEG as base64
+  const jpegBase64 = await FileSystem.readAsStringAsync(result.uri, {
+    encoding: FileSystem.EncodingType.Base64,
+  });
+
+  // Save JPEG with proper extension
+  const outputFile = `${seisDir}/${baseName}_sei.jpg`;
+  await FileSystem.writeAsStringAsync(outputFile, jpegBase64, { encoding: FileSystem.EncodingType.Base64 });
+
+  return { png: jpegBase64, path: outputFile };
 }
 

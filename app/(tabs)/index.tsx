@@ -8,6 +8,7 @@ import * as FileSystem from 'expo-file-system/legacy';
 import { VideoPicker } from '../../components/VideoPicker';
 import { VideoPreview } from '../../components/VideoPreview';
 import { useVideoPickerLogic } from '../../components/hooks/useVideoPickerLogic';
+import { classifySEI, initializeCNNModel } from '../pipeline/cnnPipeline';
 import { exportJson, exportSei } from '../pipeline/exportPipeline';
 import { generateSei } from '../pipeline/seiPipeline';
 import { extractKeypoints, handleWebViewMessage } from '../pipeline/videoPipeline';
@@ -25,6 +26,13 @@ export default function Tab() {
   const [seiSavedPath, setSeiSavedPath] = useState<string | null>(null);
   const [generating, setGenerating] = useState(false);
   const [htmlContent, setHtmlContent] = useState<string>('');
+  const [cnnResult, setCnnResult] = useState<{
+    predictedClass: string;
+    confidence: number;
+    allScores: { label: string; score: number }[];
+  } | null>(null);
+  const [cnnLoading, setCnnLoading] = useState(false);
+  const [cnnModelReady, setCnnModelReady] = useState(false);
   const webViewRef = useRef<WebView>(null);
   const [webViewReady, setWebViewReady] = useState(false);
   const [showPreview, setShowPreview] = useState(true); // Temporarily show WebView for debugging
@@ -55,6 +63,22 @@ export default function Tab() {
       }
     }
     loadHTML();
+  }, []);
+
+  // Initialize CNN model on mount
+  useEffect(() => {
+    async function initCNN() {
+      try {
+        console.log('[App] Initializing CNN model...');
+        await initializeCNNModel();
+        setCnnModelReady(true);
+        console.log('[App] CNN model ready!');
+      } catch (err: any) {
+        console.error('[App] Failed to initialize CNN:', err);
+        setError(`Failed to load CNN model: ${err.message}`);
+      }
+    }
+    initCNN();
   }, []);
 
   // Handle messages from WebView
@@ -106,6 +130,30 @@ export default function Tab() {
     setGenerating,
     setError
   );
+  
+  const onRunCNN = async () => {
+    if (!seiSavedPath) {
+      setError('No SEI image available');
+      return;
+    }
+    
+    try {
+      setCnnLoading(true);
+      setError(null);
+      console.log('[App] Running CNN classification...');
+      
+      const classificationResult = await classifySEI(seiSavedPath);
+      setCnnResult(classificationResult);
+      
+      console.log('[App] Classification complete:', classificationResult.predictedClass);
+    } catch (err: any) {
+      console.error('[App] CNN classification failed:', err);
+      setError(`CNN classification failed: ${err.message}`);
+    } finally {
+      setCnnLoading(false);
+    }
+  };
+  
   const onExportSei = () => exportSei(seiSavedPath, fileName);
 
   const onExportJson = () => exportJson(result, fileName);
@@ -233,6 +281,63 @@ export default function Tab() {
             <View style={{ marginTop: 12 }}>
               <Button title="Export SEI to Downloads" onPress={onExportSei} disabled={!seiSavedPath} />
             </View>
+          </View>
+
+          {/* Step 4: CNN Classification */}
+          <View style={styles.extractionContainer}>
+            <Text style={styles.stepTitle}>Step 4: Gait Classification</Text>
+            <Text style={{ marginBottom: 12, color: '#666', textAlign: 'center' }}>
+              {cnnModelReady ? '✓ CNN model loaded' : 'Loading CNN model...'}
+            </Text>
+            
+            <Button 
+              title="Classify Gait" 
+              onPress={onRunCNN} 
+              disabled={!seiSavedPath || cnnLoading || !cnnModelReady} 
+            />
+
+            {cnnLoading && (
+              <View style={styles.progress}>
+                <ActivityIndicator size="large" />
+                <Text style={styles.progressText}>Classifying gait pattern...</Text>
+              </View>
+            )}
+
+            {cnnResult && (
+              <View style={styles.result}>
+                <Text style={styles.resultText}>
+                  🎯 Predicted: {cnnResult.predictedClass}
+                </Text>
+                <Text style={{ fontSize: 18, marginTop: 8 }}>
+                  Confidence: {(cnnResult.confidence * 100).toFixed(2)}%
+                </Text>
+                
+                <Text style={{ fontWeight: '600', marginTop: 16, marginBottom: 8 }}>
+                  All Predictions:
+                </Text>
+                {cnnResult.allScores.map((item, index) => (
+                  <View key={index} style={{ marginVertical: 4 }}>
+                    <Text style={{ fontSize: 14 }}>
+                      {item.label}: {(item.score * 100).toFixed(2)}%
+                    </Text>
+                    <View style={{ 
+                      height: 4, 
+                      backgroundColor: '#e0e0e0', 
+                      borderRadius: 2, 
+                      marginTop: 2,
+                      overflow: 'hidden'
+                    }}>
+                      <View style={{ 
+                        height: '100%', 
+                        width: `${item.score * 100}%`, 
+                        backgroundColor: index === 0 ? '#4caf50' : '#9e9e9e',
+                        borderRadius: 2
+                      }} />
+                    </View>
+                  </View>
+                ))}
+              </View>
+            )}
           </View>
       </View>
     </ScrollView>
