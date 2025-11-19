@@ -359,7 +359,7 @@ export default function Tab() {
     // --- Disclaimer (centered, small) ---
     try {
       const disclaimer = 'Disclaimer: The analysis results are for informational purposes only and are not clinical diagnoses. Consult a healthcare professional for clinical assessment.';
-      const size = 10;
+      const size = 14;
       const maxW = maxContentWidth;
       function wrapText(text: string, f: any, s: number, mw: number) {
         const words = text.split(' ');
