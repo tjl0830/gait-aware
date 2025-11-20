@@ -22,11 +22,11 @@ export async function exportSei(seiSavedPath: string | null, fileName: string | 
       console.log('[Pipeline] Step: Export SEI - permission denied');
       return;
     }
-    const filename = `${baseName}_sei.png`;
-    const destUri = await SAF.createFileAsync(perms.directoryUri, filename, 'image/png');
+    const filename = `${baseName}_sei.jpg`;
+    const destUri = await SAF.createFileAsync(perms.directoryUri, filename, 'image/jpeg');
     const content = await FileSystem.readAsStringAsync(seiSavedPath, { encoding: FileSystem.EncodingType.Base64 });
     await FileSystem.writeAsStringAsync(destUri, content, { encoding: FileSystem.EncodingType.Base64 });
-    Alert.alert('Exported', 'SEI PNG saved to the selected folder.');
+    Alert.alert('Exported', 'SEI image saved to the selected folder.');
     console.log('[Pipeline] Step: Export SEI - exported to SAF');
   } else {
     Alert.alert('Saved', `App file path:\n${seiSavedPath}`);
@@ -67,4 +67,84 @@ export async function exportJson(result: any, fileName: string | null) {
     console.log('[Pipeline] Step: Export JSON - saved to app path');
   }
   console.log('[Pipeline] Step: Export JSON - completed');
+}
+
+export async function exportAllResults(
+  seiSavedPath: string | null, 
+  result: any, 
+  fileName: string | null
+) {
+  console.log('[Pipeline] Step: Export All Results - started');
+  
+  const baseName = fileName?.split('.')[0] || 'video';
+  
+  if (Platform.OS === 'android') {
+    const SAF = (FileSystem as any).StorageAccessFramework;
+    if (!SAF?.requestDirectoryPermissionsAsync) {
+      Alert.alert('Not supported', 'Storage Access Framework is not available.');
+      console.log('[Pipeline] Step: Export All Results - SAF not available');
+      return;
+    }
+    
+    // Request permission once
+    const perms = await SAF.requestDirectoryPermissionsAsync();
+    if (!perms.granted) {
+      Alert.alert('Permission denied', 'Export cancelled.');
+      console.log('[Pipeline] Step: Export All Results - permission denied');
+      return;
+    }
+    
+    let exportedFiles: string[] = [];
+    
+    // Export SEI if available
+    if (seiSavedPath) {
+      try {
+        const seiFilename = `${baseName}_sei.jpg`; // Changed to .jpg
+        const seiDestUri = await SAF.createFileAsync(perms.directoryUri, seiFilename, 'image/jpeg');
+        const seiContent = await FileSystem.readAsStringAsync(seiSavedPath, { 
+          encoding: FileSystem.EncodingType.Base64 
+        });
+        await FileSystem.writeAsStringAsync(seiDestUri, seiContent, { 
+          encoding: FileSystem.EncodingType.Base64 
+        });
+        exportedFiles.push('SEI image');
+        console.log('[Pipeline] Step: Export All Results - SEI exported');
+      } catch (err: any) {
+        console.error('[Pipeline] SEI export error:', err);
+      }
+    }
+    
+    // Export JSON if available
+    if (result?.outputFile) {
+      try {
+        const jsonFilename = `${baseName}_pose.json`;
+        const jsonDestUri = await SAF.createFileAsync(perms.directoryUri, jsonFilename, 'application/json');
+        const jsonContent = await FileSystem.readAsStringAsync(result.outputFile, { encoding: 'utf8' });
+        await FileSystem.writeAsStringAsync(jsonDestUri, jsonContent, { encoding: 'utf8' });
+        exportedFiles.push('keypoints JSON');
+        console.log('[Pipeline] Step: Export All Results - JSON exported');
+      } catch (err: any) {
+        console.error('[Pipeline] JSON export error:', err);
+      }
+    }
+    
+    if (exportedFiles.length > 0) {
+      Alert.alert(
+        'Export Successful', 
+        `Exported ${exportedFiles.join(' and ')} to the selected folder.`
+      );
+    } else {
+      Alert.alert('Export Failed', 'No files were exported.');
+    }
+    
+  } else {
+    // iOS - just show file paths
+    const paths = [];
+    if (seiSavedPath) paths.push(`SEI: ${seiSavedPath}`);
+    if (result?.outputFile) paths.push(`JSON: ${result.outputFile}`);
+    Alert.alert('Saved', paths.join('\n\n'));
+    console.log('[Pipeline] Step: Export All Results - saved to app paths');
+  }
+  
+  console.log('[Pipeline] Step: Export All Results - completed');
 }
