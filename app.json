@@ -12,6 +12,13 @@
       "supportsTablet": true
     },
     "android": {
+      "permissions": [
+        "INTERNET",
+        "READ_EXTERNAL_STORAGE",
+        "WRITE_EXTERNAL_STORAGE",
+        "READ_MEDIA_IMAGES",
+        "READ_MEDIA_VIDEO"
+      ],
       "adaptiveIcon": {
         "backgroundColor": "#E6F4FE",
         "foregroundImage": "./assets/images/android-icon-foreground.png",
@@ -20,7 +27,7 @@
       },
       "edgeToEdgeEnabled": true,
       "predictiveBackGestureEnabled": false,
-      "package": "com.caelianzspn.gaitaware"
+      "package": "com.tjl0830.gaitaware"
     },
     "web": {
       "output": "static",
@@ -40,7 +47,8 @@
           }
         }
       ],
-      "expo-video"
+      "expo-video",
+      "react-native-compressor"
     ],
     "experiments": {
       "typedRoutes": true,
@@ -49,9 +57,8 @@
     "extra": {
       "router": {},
       "eas": {
-        "projectId": "45c210cc-4f68-4a91-b35a-d0f6c220ae4f"
+        "projectId": "38c39864-c47a-4dd2-a0fa-df6368ec3b55"
       }
-    },
-    "owner": "caelianzspn"
+    }
   }
 }
