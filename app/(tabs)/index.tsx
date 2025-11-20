@@ -109,6 +109,14 @@ export default function Tab() {
     handleWebViewMessage(event, fileName, setResult, setProgress, setError, setRunning);
     try {
       const message = JSON.parse(event.nativeEvent.data);
+      
+      // Forward console logs from WebView
+      if (message.type === 'console') {
+        const prefix = message.level === 'error' ? '❌' : message.level === 'warn' ? '⚠️' : '📝';
+        console.log(`[WebView] ${prefix} ${message.message}`);
+        return;
+      }
+      
       if (message.type === 'status' && String(message.message).toLowerCase().includes('initialized')) {
         setWebViewReady(true);
       }

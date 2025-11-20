@@ -2,6 +2,41 @@
 <html>
 <head>
     <meta charset="utf-8">
+    <script>
+        // Forward console logs to React Native FIRST (before any other scripts)
+        (function() {
+            const originalLog = console.log;
+            const originalError = console.error;
+            const originalWarn = console.warn;
+            
+            console.log = function(...args) {
+                window.ReactNativeWebView?.postMessage(JSON.stringify({
+                    type: 'console',
+                    level: 'log',
+                    message: args.join(' ')
+                }));
+                originalLog.apply(console, args);
+            };
+            
+            console.error = function(...args) {
+                window.ReactNativeWebView?.postMessage(JSON.stringify({
+                    type: 'console',
+                    level: 'error',
+                    message: args.join(' ')
+                }));
+                originalError.apply(console, args);
+            };
+            
+            console.warn = function(...args) {
+                window.ReactNativeWebView?.postMessage(JSON.stringify({
+                    type: 'console',
+                    level: 'warn',
+                    message: args.join(' ')
+                }));
+                originalWarn.apply(console, args);
+            };
+        })();
+    </script>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/control_utils/control_utils.js" crossorigin="anonymous"></script>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js" crossorigin="anonymous"></script>
@@ -36,12 +71,18 @@
         <canvas id="output_canvas" width="1280px" height="720px"></canvas>
     </div>
     <script>
+        console.log('🎬 [MediaPipe] Script started - Creating Pose instance...');
+        
         // MediaPipe Pose instance
         const pose = new Pose({
             locateFile: (file) => {
-                return `https://cdn.jsdelivr.net/npm/@mediapipe/pose/${file}`;
+                const url = `https://cdn.jsdelivr.net/npm/@mediapipe/pose/${file}`;
+                console.log(`📦 [MediaPipe] locateFile requested: ${file} -> ${url}`);
+                return url;
             }
         });
+
+        console.log('✅ [MediaPipe] Pose instance created successfully');
 
         // Configure pose detection
         const poseOptions = {
@@ -50,19 +91,25 @@
             minDetectionConfidence: 0.5,
             minTrackingConfidence: 0.4
         };
+        
+        console.log('⚙️ [MediaPipe] Setting options:', poseOptions);
         pose.setOptions(poseOptions);
+        console.log('✅ [MediaPipe] Options set successfully');
         
         // Model complexity lookup
         const MODEL_NAMES = { 0: 'Lite', 1: 'Full', 2: 'Heavy' };
         
         // Log configuration
-        console.log('MediaPipe Pose Configuration:', poseOptions);
-        console.log(`Using model complexity: ${poseOptions.modelComplexity} (${MODEL_NAMES[poseOptions.modelComplexity] || 'Unknown'})`);
+        console.log(`📊 [MediaPipe] Configuration: Model complexity ${poseOptions.modelComplexity} (${MODEL_NAMES[poseOptions.modelComplexity] || 'Unknown'})`);
+        console.log(`📊 [MediaPipe] Detection confidence: ${poseOptions.minDetectionConfidence}`);
+        console.log(`📊 [MediaPipe] Tracking confidence: ${poseOptions.minTrackingConfidence}`);
 
     // Setup video and canvas elements
+        console.log('🎨 [MediaPipe] Setting up video and canvas elements...');
         const videoElement = document.querySelector('.video-player');
         const canvasElement = document.querySelector('#output_canvas');
         const canvasCtx = canvasElement.getContext('2d');
+        console.log('✅ [MediaPipe] Video and canvas elements ready');
         const results = {
             frames: [],
             metadata: {
@@ -83,14 +130,19 @@
                 const message = typeof raw === 'string' ? JSON.parse(raw) : JSON.parse(String(raw));
 
                 if (message.type === 'process_video') {
+                    console.log('📨 [MediaPipe] Received process_video message');
+                    console.log(`📊 [MediaPipe] Video data size: ${message.video ? message.video.length : 0} bytes`);
+                    
                     // Acknowledge receipt
                     window.ReactNativeWebView?.postMessage?.(JSON.stringify({ type: 'status', message: 'Received video. Preparing...' }));
                     try {
+                        console.log('🎬 [MediaPipe] Preparing video element...');
                         // Prepare video element for autoplay policies
                         videoElement.muted = true;
                         videoElement.playsInline = true;
                         videoElement.src = message.video;
 
+                        console.log('⏳ [MediaPipe] Waiting for video metadata...');
                         // Wait for metadata to load
                         await new Promise((resolve, reject) => {
                             const onMeta = () => { cleanup(); resolve(); };
@@ -103,6 +155,8 @@
                             videoElement.addEventListener('error', onErr, { once: true });
                         });
 
+                        console.log('✅ [MediaPipe] Video metadata loaded');
+                        
                         // Prepare processing settings
                         results.frames = [];
                         results.metadata.frame_count = 0;
@@ -113,6 +167,8 @@
 
                         const duration = Math.max(0, Number(videoElement.duration) || 0);
                         totalFrames = Math.max(1, Math.floor(duration * targetFps));
+
+                        console.log(`📊 [MediaPipe] Video info: ${results.metadata.width}x${results.metadata.height}, ${duration.toFixed(2)}s, ${totalFrames} frames at ${targetFps} fps`);
 
                         // Deterministic, seek-driven processing (no reliance on videoElement.ended)
                         processing = true;
@@ -136,10 +192,17 @@
 
         // Process video frames
         async function processVideo(duration) {
+            console.log(`🎥 [MediaPipe] Starting video processing - Duration: ${duration}s, Total frames: ${totalFrames}`);
+            
             // Install results handler once per processing session
             pose.onResults((poseResults) => {
                 if (!processing) return;
                 if (poseResults.poseLandmarks) {
+                    // Log first frame detection
+                    if (results.metadata.frame_count === 0) {
+                        console.log('✅ [MediaPipe] First frame processed successfully - pose detected!');
+                        console.log(`📊 [MediaPipe] Landmarks detected: ${poseResults.poseLandmarks.length} points`);
+                    }
                     // Store landmarks for this frame
                     results.frames.push({
                         frame_index: results.metadata.frame_count,
@@ -191,6 +254,8 @@
             }
 
             processing = false;
+            console.log(`✅ [MediaPipe] Video processing complete - ${results.metadata.frame_count} frames extracted`);
+            
             // Send final results once loop completes
             window.ReactNativeWebView.postMessage(JSON.stringify({
                 type: 'complete',
@@ -202,6 +267,7 @@
         }
 
         // Send ready status
+        console.log('🎉 [MediaPipe] Initialization complete - Ready to process videos!');
         window.ReactNativeWebView.postMessage(JSON.stringify({
             type: 'status',
             message: `MediaPipe Pose initialized (Model: ${MODEL_NAMES[poseOptions.modelComplexity] || 'Unknown'} [${poseOptions.modelComplexity}])`
