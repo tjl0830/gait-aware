@@ -11,6 +11,7 @@ interface PipelineResultsScreenProps {
   videoFileName?: string;
   onExportResults?: () => void;
   onStartNew?: () => void;
+  onSaveReport?: () => void;
 }
 
 export function PipelineResultsScreen({ 
@@ -18,7 +19,8 @@ export function PipelineResultsScreen({
   seiPng, 
   videoFileName,
   onExportResults,
-  onStartNew 
+  onStartNew,
+  onSaveReport 
 }: PipelineResultsScreenProps) {
   return (
     <ScrollView style={styles.scrollContainer}>
@@ -93,10 +95,19 @@ export function PipelineResultsScreen({
 
         {/* Action Buttons */}
         <View style={styles.actionsContainer}>
+          {onSaveReport && (
+            <View style={styles.buttonWrapper}>
+              <Button 
+                title="Save Report" 
+                onPress={onSaveReport}
+                color="#FF9500"
+              />
+            </View>
+          )}
           {onExportResults && (
             <View style={styles.buttonWrapper}>
               <Button 
-                title="Export Results" 
+                title="Export Raw Data" 
                 onPress={onExportResults}
                 color="#007AFF"
               />

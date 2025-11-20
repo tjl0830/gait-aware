@@ -43,8 +43,18 @@ export default function Tab() {
   // Pipeline state
   const [isPipelineRunning, setIsPipelineRunning] = useState(false);
   const [showResults, setShowResults] = useState(false);
+  const [showUserInfoForm, setShowUserInfoForm] = useState(false);
   const [pipelineLogs, setPipelineLogs] = useState<string[]>([]);
   const logsRef = useRef<string[]>([]);
+  
+  // User info state
+  const [userInfo, setUserInfo] = useState<{
+    name: string;
+    gender: string;
+    age: string;
+    notes: string;
+    profilePicture: string;
+  }>({ name: '', gender: '', age: '', notes: '', profilePicture: '' });
   
   // Download progress state
   const [downloadStatus, setDownloadStatus] = useState<{
@@ -316,6 +326,7 @@ export default function Tab() {
   // Reset and start new analysis
   const startNewAnalysis = () => {
     setShowResults(false);
+    setShowUserInfoForm(false);
     setResult(null);
     setSeiPng(null);
     setSeiSavedPath(null);
@@ -323,6 +334,67 @@ export default function Tab() {
     setError(null);
     logsRef.current = [];
     setPipelineLogs([]);
+    setUserInfo({ name: '', gender: '', age: '', notes: '', profilePicture: '' });
+  };
+  
+  // Show user info form to save report
+  const handleSaveReport = () => {
+    setShowResults(false);
+    setShowUserInfoForm(true);
+  };
+  
+  // Cancel user info form and go back to results
+  const handleCancelUserInfo = () => {
+    setShowUserInfoForm(false);
+    setShowResults(true);
+  };
+  
+  // Save to history
+  const handleSaveToHistory = async () => {
+    try {
+      // Import AsyncStorage dynamically
+      const AsyncStorage = await import('@react-native-async-storage/async-storage').then(mod => mod.default);
+      
+      // Save SEI image to file system first to get a URI
+      let imageUris: string[] | undefined = undefined;
+      if (seiPng && seiSavedPath) {
+        imageUris = [seiSavedPath];
+      }
+      
+      // Create history item (matching history.tsx structure)
+      const historyItem = {
+        id: Date.now(),
+        name: userInfo.name.trim() || 'Unknown',
+        gaitType: cnnResult 
+          ? `${cnnResult.predictedClass} (${(cnnResult.confidence * 100).toFixed(0)}%)`
+          : 'Unspecified',
+        jointDeviations: undefined, // Will be implemented later
+        gender: userInfo.gender.trim() || undefined,
+        age: userInfo.age.trim() || undefined,
+        notes: userInfo.notes.trim() || undefined,
+        images: imageUris,
+        createdAt: new Date().toISOString(),
+      };
+      
+      // Load existing history
+      const STORAGE_KEY = 'gaitaware:history';
+      const existingData = await AsyncStorage.getItem(STORAGE_KEY);
+      const history = existingData ? JSON.parse(existingData) : [];
+      
+      // Add new item at beginning
+      const updatedHistory = [historyItem, ...history];
+      
+      // Save to storage
+      await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(updatedHistory));
+      
+      alert('Report saved to history successfully!');
+      
+      // Reset and go back to home
+      startNewAnalysis();
+    } catch (err: any) {
+      console.error('Failed to save to history:', err);
+      alert('Failed to save report. Please try again.');
+    }
   };
 
   // Pipeline function wrappers (kept for backward compatibility)
@@ -393,7 +465,39 @@ export default function Tab() {
           videoFileName={fileName || undefined}
           onExportResults={() => exportAllResults(seiSavedPath, result, fileName)}
           onStartNew={startNewAnalysis}
+          onSaveReport={handleSaveReport}
         />
+      ) : showUserInfoForm ? (
+        <ScrollView style={styles.scrollContainer}>
+          <View style={styles.container}>
+            <View style={styles.userInfoFormContainer}>
+              <Text style={styles.formTitle}>Save Report to History</Text>
+              <Text style={styles.formSubtitle}>Fill in patient information to save this analysis</Text>
+              
+              <UserInfo 
+                initialData={userInfo}
+                onChange={setUserInfo}
+              />
+              
+              <View style={styles.formButtonsContainer}>
+                <TouchableOpacity
+                  style={[styles.formButton, styles.cancelButton]}
+                  onPress={handleCancelUserInfo}
+                >
+                  <Text style={styles.cancelButtonText}>Cancel</Text>
+                </TouchableOpacity>
+                
+                <TouchableOpacity
+                  style={[styles.formButton, styles.saveButton]}
+                  onPress={handleSaveToHistory}
+                  disabled={!userInfo.name.trim()}
+                >
+                  <Text style={styles.saveButtonText}>Save to History</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </View>
+        </ScrollView>
       ) : (
         <ScrollView style={styles.scrollContainer}>
           <View style={styles.container}>
@@ -402,8 +506,6 @@ export default function Tab() {
               <VideoPicker onPress={pickVideo} isCompressing={isCompressing} />
               <VideoPreview uri={videoUri} fileName={fileName} player={player} />
             </View>
-
-            <UserInfo />
 
             {/* Next Button */}
             <View style={styles.nextButtonContainer}>
@@ -441,6 +543,22 @@ export default function Tab() {
                 originWhitelist={['*']}
                 allowFileAccess={true}
                 allowUniversalAccessFromFileURLs={true}
+                cacheEnabled={false}
+                incognito={true}
+                sharedCookiesEnabled={false}
+                onError={(syntheticEvent) => {
+                  const { nativeEvent } = syntheticEvent;
+                  console.error('[WebView] Error:', nativeEvent);
+                  setError(`WebView error: ${nativeEvent.description || 'Unknown error'}`);
+                }}
+                onHttpError={(syntheticEvent) => {
+                  const { nativeEvent } = syntheticEvent;
+                  console.error('[WebView] HTTP Error:', nativeEvent.statusCode, nativeEvent.url);
+                  setError(`Failed to load resource: ${nativeEvent.url} (${nativeEvent.statusCode})`);
+                }}
+                onLoadEnd={() => {
+                  console.log('[WebView] Load completed');
+                }}
               />
             ) : null}
 
@@ -717,5 +835,53 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     marginBottom: 16,
     textAlign: 'center',
+  },
+  userInfoFormContainer: {
+    width: '100%',
+    maxWidth: 600,
+    backgroundColor: '#fff',
+    padding: 20,
+    borderRadius: 12,
+    marginTop: 20,
+  },
+  formTitle: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    marginBottom: 8,
+    textAlign: 'center',
+  },
+  formSubtitle: {
+    fontSize: 16,
+    color: '#666',
+    marginBottom: 24,
+    textAlign: 'center',
+  },
+  formButtonsContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginTop: 24,
+    gap: 12,
+  },
+  formButton: {
+    flex: 1,
+    paddingVertical: 14,
+    borderRadius: 8,
+    alignItems: 'center',
+  },
+  cancelButton: {
+    backgroundColor: '#f0f0f0',
+  },
+  cancelButtonText: {
+    color: '#333',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  saveButton: {
+    backgroundColor: '#007AFF',
+  },
+  saveButtonText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '600',
   },
 });

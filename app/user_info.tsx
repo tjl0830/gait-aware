@@ -1,6 +1,6 @@
 import { Picker } from '@react-native-picker/picker';
 import * as ImagePicker from 'expo-image-picker';
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   Image,
   StyleSheet,
@@ -10,7 +10,24 @@ import {
   View
 } from 'react-native';
 
-function UserInfo() {
+interface UserInfoProps {
+  initialData?: {
+    profilePicture: string;
+    name: string;
+    gender: string;
+    age: string;
+    notes: string;
+  };
+  onChange?: (data: {
+    profilePicture: string;
+    name: string;
+    gender: string;
+    age: string;
+    notes: string;
+  }) => void;
+}
+
+function UserInfo({ initialData, onChange }: UserInfoProps = {}) {
   const [formData, setFormData] = useState({
     profilePicture: '',
     name: '',
@@ -18,6 +35,13 @@ function UserInfo() {
     age: '',
     notes: ''
   });
+  
+  // Initialize with initialData if provided
+  useEffect(() => {
+    if (initialData) {
+      setFormData(initialData);
+    }
+  }, [initialData]);
 
   const pickImage = async () => {
     const result = await ImagePicker.launchImageLibraryAsync({
@@ -28,10 +52,12 @@ function UserInfo() {
     });
 
     if (!result.canceled && result.assets[0].uri) {
-      setFormData(prev => ({
-        ...prev,
+      const newData = {
+        ...formData,
         profilePicture: result.assets[0].uri
-      }));
+      };
+      setFormData(newData);
+      onChange?.(newData);
     }
   };
 
@@ -41,8 +67,6 @@ function UserInfo() {
 
   return (
     <View style={styles.container}>
-      <Text style={styles.title}>Step 2: Fill User Info</Text>
-      
       <View style={styles.formGroup}>
         <Text style={styles.label}>Profile Picture</Text>
         <TouchableOpacity onPress={pickImage} style={styles.imagePicker}>
@@ -61,7 +85,11 @@ function UserInfo() {
         <TextInput
           style={styles.input}
           value={formData.name}
-          onChangeText={(value) => setFormData(prev => ({ ...prev, name: value }))}
+          onChangeText={(value) => {
+            const newData = { ...formData, name: value };
+            setFormData(newData);
+            onChange?.(newData);
+          }}
           placeholder="Enter your name"
         />
       </View>
@@ -71,9 +99,11 @@ function UserInfo() {
           <Text style={styles.label}>Gender</Text>
           <Picker
             selectedValue={formData.gender}
-            onValueChange={(value) =>
-              setFormData((prev) => ({ ...prev, gender: value }))
-            }
+            onValueChange={(value) => {
+              const newData = { ...formData, gender: value };
+              setFormData(newData);
+              onChange?.(newData);
+            }}
             style={styles.picker}
           >
             <Picker.Item label="Select gender" value="" />
@@ -87,9 +117,11 @@ function UserInfo() {
           <TextInput
             style={styles.input}
             value={formData.age}
-            onChangeText={(value) =>
-              setFormData((prev) => ({ ...prev, age: value }))
-            }
+            onChangeText={(value) => {
+              const newData = { ...formData, age: value };
+              setFormData(newData);
+              onChange?.(newData);
+            }}
             keyboardType="numeric"
             placeholder="Enter your age"
           />
@@ -102,7 +134,11 @@ function UserInfo() {
         <TextInput
           style={[styles.input, styles.textArea]}
           value={formData.notes}
-          onChangeText={(value) => setFormData(prev => ({ ...prev, notes: value }))}
+          onChangeText={(value) => {
+            const newData = { ...formData, notes: value };
+            setFormData(newData);
+            onChange?.(newData);
+          }}
           multiline={true}
           numberOfLines={4}
           placeholder="Enter notes"
