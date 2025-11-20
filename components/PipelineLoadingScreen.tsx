@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { WebView } from 'react-native-webview';
 
@@ -7,9 +7,18 @@ interface PipelineLoadingScreenProps {
   webViewRef?: React.RefObject<WebView | null>;
   htmlContent?: string;
   onWebViewMessage?: (event: any) => void;
+  downloadStatus?: {
+    fileName: string;
+    status: 'started' | 'downloading' | 'complete';
+    percent?: number;
+    loaded: number;
+    total: number;
+    receivedBytes?: number;
+    totalBytes?: number;
+  } | null;
 }
 
-export function PipelineLoadingScreen({ logs, webViewRef, htmlContent, onWebViewMessage }: PipelineLoadingScreenProps) {
+export function PipelineLoadingScreen({ logs, webViewRef, htmlContent, onWebViewMessage, downloadStatus }: PipelineLoadingScreenProps) {
   const scrollViewRef = useRef<ScrollView>(null);
 
   // Auto-scroll to bottom when logs update
@@ -29,23 +38,51 @@ export function PipelineLoadingScreen({ logs, webViewRef, htmlContent, onWebView
         <Text style={styles.title}>Processing Video</Text>
         <Text style={styles.subtitle}>Please wait while we analyze your video...</Text>
         
-        {/* WebView Preview (Debug) */}
-        {htmlContent && webViewRef && (
-          <View style={styles.webViewContainer}>
-            <Text style={styles.webViewLabel}>Pose Detection Preview:</Text>
-            <WebView
-              ref={webViewRef}
-              source={{ html: htmlContent }}
-              style={styles.webView}
-              onMessage={onWebViewMessage}
-              javaScriptEnabled={true}
-              allowsInlineMediaPlayback={true}
-              mediaPlaybackRequiresUserAction={false}
-              originWhitelist={['*']}
-              allowFileAccess={true}
-              allowUniversalAccessFromFileURLs={true}
-            />
+        {/* Download Progress Indicator */}
+        {downloadStatus && downloadStatus.status !== 'complete' && (
+          <View style={styles.downloadContainer}>
+            <Text style={styles.downloadTitle}>Loading MediaPipe Models</Text>
+            <Text style={styles.downloadFileName}>
+              {downloadStatus.fileName}
+            </Text>
+            <View style={styles.progressBarContainer}>
+              <View 
+                style={[
+                  styles.progressBarFill, 
+                  { width: `${downloadStatus.percent || 0}%` }
+                ]} 
+              />
+            </View>
+            <View style={styles.downloadStats}>
+              <Text style={styles.downloadStatsText}>
+                {downloadStatus.percent ? `${downloadStatus.percent.toFixed(1)}%` : 'Starting...'}
+              </Text>
+              <Text style={styles.downloadStatsText}>
+                File {downloadStatus.loaded + 1} of {downloadStatus.total}
+              </Text>
+            </View>
+            {downloadStatus.receivedBytes && downloadStatus.totalBytes && (
+              <Text style={styles.downloadBytes}>
+                {(downloadStatus.receivedBytes / 1024 / 1024).toFixed(2)} MB / {(downloadStatus.totalBytes / 1024 / 1024).toFixed(2)} MB
+              </Text>
+            )}
           </View>
+        )}
+        
+        {/* Hidden WebView for processing */}
+        {htmlContent && webViewRef && (
+          <WebView
+            ref={webViewRef}
+            source={{ html: htmlContent }}
+            style={{ width: 0, height: 0, opacity: 0 }}
+            onMessage={onWebViewMessage}
+            javaScriptEnabled={true}
+            allowsInlineMediaPlayback={true}
+            mediaPlaybackRequiresUserAction={false}
+            originWhitelist={['*']}
+            allowFileAccess={true}
+            allowUniversalAccessFromFileURLs={true}
+          />
         )}
         
         {/* Logs Container */}
@@ -112,28 +149,6 @@ const styles = StyleSheet.create({
     marginBottom: 24,
     textAlign: 'center',
   },
-  webViewContainer: {
-    width: '100%',
-    marginBottom: 20,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: '#e0e0e0',
-    overflow: 'hidden',
-    backgroundColor: '#fff',
-  },
-  webViewLabel: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#666',
-    padding: 8,
-    backgroundColor: '#f8f8f8',
-    borderBottomWidth: 1,
-    borderBottomColor: '#e0e0e0',
-  },
-  webView: {
-    width: '100%',
-    height: 300,
-  },
   logsContainer: {
     width: '100%',
     height: 300,
@@ -155,5 +170,57 @@ const styles = StyleSheet.create({
     color: '#333',
     marginBottom: 4,
     lineHeight: 18,
+  },
+  downloadContainer: {
+    width: '100%',
+    backgroundColor: '#f0f7ff',
+    borderRadius: 8,
+    padding: 16,
+    marginBottom: 20,
+    borderWidth: 1,
+    borderColor: '#007AFF',
+  },
+  downloadTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#007AFF',
+    marginBottom: 8,
+    textAlign: 'center',
+  },
+  downloadFileName: {
+    fontSize: 13,
+    color: '#666',
+    marginBottom: 12,
+    textAlign: 'center',
+    fontFamily: 'monospace',
+  },
+  progressBarContainer: {
+    width: '100%',
+    height: 8,
+    backgroundColor: '#e0e0e0',
+    borderRadius: 4,
+    overflow: 'hidden',
+    marginBottom: 8,
+  },
+  progressBarFill: {
+    height: '100%',
+    backgroundColor: '#007AFF',
+    borderRadius: 4,
+  },
+  downloadStats: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginTop: 4,
+  },
+  downloadStatsText: {
+    fontSize: 12,
+    color: '#666',
+    fontWeight: '500',
+  },
+  downloadBytes: {
+    fontSize: 11,
+    color: '#999',
+    textAlign: 'center',
+    marginTop: 4,
   },
 });

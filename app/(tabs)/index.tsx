@@ -46,6 +46,17 @@ export default function Tab() {
   const [pipelineLogs, setPipelineLogs] = useState<string[]>([]);
   const logsRef = useRef<string[]>([]);
   
+  // Download progress state
+  const [downloadStatus, setDownloadStatus] = useState<{
+    fileName: string;
+    status: 'started' | 'downloading' | 'complete';
+    percent?: number;
+    loaded: number;
+    total: number;
+    receivedBytes?: number;
+    totalBytes?: number;
+  } | null>(null);
+  
   const player = useVideoPlayer(videoUri, player => {
     if (player) {
       player.loop = true;
@@ -114,6 +125,34 @@ export default function Tab() {
       if (message.type === 'console') {
         const prefix = message.level === 'error' ? '❌' : message.level === 'warn' ? '⚠️' : '📝';
         console.log(`[WebView] ${prefix} ${message.message}`);
+        return;
+      }
+      
+      // Handle download progress
+      if (message.type === 'download_progress') {
+        setDownloadStatus({
+          fileName: message.fileName,
+          status: message.status,
+          percent: message.percent,
+          loaded: message.loaded,
+          total: message.total,
+          receivedBytes: message.receivedBytes,
+          totalBytes: message.totalBytes,
+        });
+        
+        // Log download progress
+        if (message.status === 'started') {
+          console.log(`📥 Downloading: ${message.fileName} (${message.loaded + 1}/${message.total})`);
+        } else if (message.status === 'complete') {
+          console.log(`✅ Downloaded: ${message.fileName} (${message.loaded}/${message.total})`);
+          
+          // Clear download status after last file
+          if (message.loaded === message.total) {
+            setTimeout(() => setDownloadStatus(null), 2000);
+          }
+        } else if (message.percent) {
+          console.log(`📊 ${message.fileName}: ${message.percent.toFixed(1)}%`);
+        }
         return;
       }
       
@@ -345,6 +384,7 @@ export default function Tab() {
           webViewRef={webViewRef}
           htmlContent={htmlContent}
           onWebViewMessage={onMessage}
+          downloadStatus={downloadStatus}
         />
       ) : showResults ? (
         <PipelineResultsScreen

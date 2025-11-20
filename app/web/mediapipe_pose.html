@@ -37,6 +37,118 @@
             };
         })();
     </script>
+    <script>
+        // Intercept fetch to track MediaPipe model downloads
+        (function() {
+            const downloadProgress = new Map();
+            let totalFiles = 0;
+            let loadedFiles = 0;
+            
+            const originalFetch = window.fetch;
+            window.fetch = function(...args) {
+                const url = args[0];
+                
+                // Only track MediaPipe files
+                if (typeof url === 'string' && url.includes('mediapipe/pose')) {
+                    const fileName = url.split('/').pop();
+                    totalFiles++;
+                    
+                    console.log(`📥 [MediaPipe] Downloading: ${fileName}`);
+                    window.ReactNativeWebView?.postMessage(JSON.stringify({
+                        type: 'download_progress',
+                        fileName: fileName,
+                        status: 'started',
+                        loaded: loadedFiles,
+                        total: totalFiles
+                    }));
+                    
+                    return originalFetch.apply(this, args).then(response => {
+                        if (!response.ok) {
+                            throw new Error(`Failed to load ${fileName}: ${response.status}`);
+                        }
+                        
+                        const contentLength = response.headers.get('content-length');
+                        const total = contentLength ? parseInt(contentLength, 10) : 0;
+                        
+                        if (!contentLength || total === 0) {
+                            // No content-length header, just track completion
+                            loadedFiles++;
+                            console.log(`✅ [MediaPipe] Downloaded: ${fileName} (${loadedFiles}/${totalFiles})`);
+                            window.ReactNativeWebView?.postMessage(JSON.stringify({
+                                type: 'download_progress',
+                                fileName: fileName,
+                                status: 'complete',
+                                loaded: loadedFiles,
+                                total: totalFiles
+                            }));
+                            return response;
+                        }
+                        
+                        // Stream the response to track bytes
+                        const reader = response.body.getReader();
+                        let receivedLength = 0;
+                        const chunks = [];
+                        
+                        const stream = new ReadableStream({
+                            async start(controller) {
+                                while (true) {
+                                    const {done, value} = await reader.read();
+                                    
+                                    if (done) break;
+                                    
+                                    chunks.push(value);
+                                    receivedLength += value.length;
+                                    
+                                    const percent = (receivedLength / total) * 100;
+                                    
+                                    // Throttle progress updates (every 10%)
+                                    if (percent % 10 < 2 || percent > 95) {
+                                        console.log(`📊 [MediaPipe] ${fileName}: ${(receivedLength / 1024 / 1024).toFixed(2)}MB / ${(total / 1024 / 1024).toFixed(2)}MB (${percent.toFixed(1)}%)`);
+                                        
+                                        window.ReactNativeWebView?.postMessage(JSON.stringify({
+                                            type: 'download_progress',
+                                            fileName: fileName,
+                                            status: 'downloading',
+                                            receivedBytes: receivedLength,
+                                            totalBytes: total,
+                                            percent: percent,
+                                            loaded: loadedFiles,
+                                            total: totalFiles
+                                        }));
+                                    }
+                                    
+                                    controller.enqueue(value);
+                                }
+                                
+                                loadedFiles++;
+                                console.log(`✅ [MediaPipe] Downloaded: ${fileName} - ${(receivedLength / 1024 / 1024).toFixed(2)}MB (${loadedFiles}/${totalFiles} files)`);
+                                
+                                window.ReactNativeWebView?.postMessage(JSON.stringify({
+                                    type: 'download_progress',
+                                    fileName: fileName,
+                                    status: 'complete',
+                                    receivedBytes: receivedLength,
+                                    totalBytes: total,
+                                    loaded: loadedFiles,
+                                    total: totalFiles
+                                }));
+                                
+                                controller.close();
+                            }
+                        });
+                        
+                        return new Response(stream, {
+                            headers: response.headers
+                        });
+                    });
+                }
+                
+                return originalFetch.apply(this, args);
+            };
+            
+            console.log('📡 [MediaPipe] Fetch interceptor installed for download tracking');
+        })();
+    </script>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/control_utils/control_utils.js" crossorigin="anonymous"></script>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js" crossorigin="anonymous"></script>
