@@ -1,11 +1,11 @@
 {
   "expo": {
     "name": "GaitAware",
-    "slug": "my-expo-app-test",
+    "slug": "gait-aware",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/gaitaware_logo.png",
-    "scheme": "myexpoapptest",
+    "scheme": "gaitaware",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "ios": {
@@ -46,15 +46,6 @@
     "experiments": {
       "typedRoutes": true,
       "reactCompiler": true
-    },
-    "assetBundlePatterns": [
-      "assets/**/*"
-    ],
-    "extra": {
-      "router": {},
-      "eas": {
-        "projectId": "1802fd41-63fa-4329-b33a-f5b22ac6991e"
-      }
     }
   }
 }

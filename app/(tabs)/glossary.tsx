@@ -17,55 +17,104 @@ type GaitType = {
 };
 
 const GAIT_TYPES: GaitType[] = [
-    {
-        id: 'antalgic',
-        title: 'Antalgic gait',
-        description: 'A gait adopted to avoid pain on weight bearing structures, typically characterised by a shortened stance phase on the affected side.',
-        conditions: [
-            'Hip arthritis',
-            'Knee osteoarthritis',
-            'Ankle sprains',
-            'Foot injuries',
-            'Lower extremity fractures'
-        ]
-    },
-    {
-        id: 'ataxic',
-        title: 'Ataxic gait',
-        description: 'Unsteady, staggering gait with wide base of support often caused by cerebellar or sensory dysfunction.',
-        conditions: [
-            'Multiple sclerosis',
-            'Cerebellar stroke',
-            'Brain tumors',
-            'Alcoholic cerebellar degeneration',
-            'Vitamin B12 deficiency'
-        ]
-    },
-    {
-        id: 'trendelenburg',
-        title: 'Trendelenburg gait',
-        description: 'Drop of the pelvis on the contralateral side during single limb stance due to weak hip abductors (gluteus medius/minimus).',
-        conditions: [
-            'Hip dysplasia',
-            'Post hip surgery',
-            'Polio',
-            'Superior gluteal nerve injury',
-            'Muscular dystrophy'
-        ]
-    },
-    {
-        id: 'shuffling',
-        title: 'Shuffling gait',
-        description: 'Small, shuffling steps often seen in Parkinsonian syndromes with reduced arm swing and stooped posture.',
-        conditions: [
-            'Parkinson\'s disease',
-            'Multiple system atrophy',
-            'Normal pressure hydrocephalus',
-            'Progressive supranuclear palsy',
-            'Drug-induced parkinsonism'
-        ]
-    },
+  {
+    id: 'antalgic',
+    title: 'Antalgic gait',
+    description: 'A way of walking used to avoid pain. The person spends less time standing on the sore or injured leg.',
+    conditions: [
+      'Hip or knee arthritis',
+      'Ankle sprain',
+      'Foot injury',
+      'Leg fracture'
+    ]
+  },
+  {
+    id: 'ataxic',
+    title: 'Ataxic gait',
+    description: 'An unsteady and unbalanced walk, often wide-based or staggering, as if the person is losing balance.',
+    conditions: [
+      'Multiple sclerosis',
+      'Cerebellar stroke',
+      'Brain tumor',
+      'Vitamin B12 deficiency'
+    ]
+  },
+  {
+    id: 'trendelenburg',
+    title: 'Trendelenburg gait',
+    description: 'The hip drops on the opposite side when walking because the muscles of the standing leg are weak.',
+    conditions: [
+      'Hip muscle weakness',
+      'After hip surgery',
+      'Polio',
+      'Hip dysplasia'
+    ]
+  },
+  {
+    id: 'shuffling',
+    title: 'Shuffling gait',
+    description: 'Short, dragging steps with little foot lift, often with a stooped posture and reduced arm swing.',
+    conditions: [
+      'Parkinson’s disease',
+      'Normal pressure hydrocephalus',
+      'Drug-induced parkinsonism'
+    ]
+  },
+  {
+    id: 'spastic',
+    title: 'Spastic gait',
+    description: 'Stiff and jerky walking. The leg may swing in a circle instead of moving straight forward.',
+    conditions: [
+      'Stroke',
+      'Multiple sclerosis',
+      'Cerebral palsy',
+      'Spinal cord injury'
+    ]
+  },
+  {
+    id: 'steppage',
+    title: 'Steppage gait (Foot drop)',
+    description: 'The person lifts the foot higher than normal to avoid tripping because the toes do not lift properly.',
+    conditions: [
+      'Peroneal nerve injury',
+      'Diabetic nerve damage',
+      'Multiple sclerosis',
+      'Charcot-Marie-Tooth disease'
+    ]
+  },
+  {
+    id: 'waddling',
+    title: 'Waddling gait',
+    description: 'A side-to-side walking motion, like a duck. The body swings when stepping forward.',
+    conditions: [
+      'Weak hip or thigh muscles',
+      'Muscular dystrophy',
+      'Hip dislocation since birth',
+      'Obesity'
+    ]
+  },
+  {
+    id: 'festinating',
+    title: 'Festinating gait',
+    description: 'Short, quick steps with the body leaning forward, as if chasing one’s own balance.',
+    conditions: [
+      'Advanced Parkinson’s disease',
+      'Progressive supranuclear palsy',
+      'Multiple system atrophy'
+    ]
+  },
+  {
+    id: 'scissors',
+    title: 'Scissors gait',
+    description: 'The legs cross or hit each other while walking, making the steps look like scissor blades.',
+    conditions: [
+      'Cerebral palsy',
+      'Spastic paraplegia',
+      'Stroke affecting both sides'
+    ]
+  }
 ];
+
 
 export default function Tab() {
     const [expanded, setExpanded] = useState<Record<string, boolean>>({});
