@@ -1,0 +1,11 @@
+{
+  "threshold": 0.1768068329674364,
+  "threshold_percentile": 95,
+  "train_errors_mean": 0.05804415991342876,
+  "train_errors_std": 0.05265522223882795,
+  "val_errors_mean": 0.059874456587915466,
+  "val_errors_std": 0.0878597974732771,
+  "test_errors_mean": 0.06517323971312275,
+  "test_errors_std": 0.04943476072657774,
+  "test_normal_rate": 96.36363636363636
+}
