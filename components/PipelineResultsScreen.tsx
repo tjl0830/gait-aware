@@ -44,142 +44,69 @@ export function PipelineResultsScreen({
         {/* Success Header */}
         <View style={styles.header}>
           <Text style={styles.successIcon}>✓</Text>
-          <Text style={styles.title}>Analysis Complete!</Text>
+          <Text style={styles.title}>Analysis Complete</Text>
           <Text style={styles.subtitle}>
-            {videoFileName
-              ? `Results for: ${videoFileName}`
-              : "Gait analysis completed successfully"}
+            Your gait has been analyzed successfully
           </Text>
         </View>
 
-        {/* CNN Classification Results */}
-        {cnnResult && (
+        {/* Main Results Card */}
+        {cnnResult && bilstmResult && (
           <View style={styles.resultCard}>
-            <Text style={styles.sectionTitle}>Gait Classification</Text>
+            <Text style={styles.sectionTitle}>Results</Text>
 
-            {/* Predicted Class */}
-            <View style={styles.predictionBox}>
-              <Text style={styles.predictionLabel}>Predicted Diagnosis:</Text>
-              <Text style={styles.predictionClass}>
-                {cnnResult.predictedClass}
-              </Text>
-              <Text style={styles.confidenceText}>
-                Confidence: {(cnnResult.confidence * 100).toFixed(2)}%
-              </Text>
-            </View>
-
-            {/* All Predictions with Bars */}
-            <View style={styles.scoresContainer}>
-              <Text style={styles.scoresTitle}>Detailed Scores:</Text>
-              {cnnResult.allScores.map((item, index) => (
-                <View key={index} style={styles.scoreRow}>
-                  <View style={styles.scoreHeader}>
-                    <Text style={styles.scoreLabel}>{item.label}</Text>
-                    <Text style={styles.scoreValue}>
-                      {(item.score * 100).toFixed(2)}%
-                    </Text>
-                  </View>
-                  <View style={styles.scoreBarBackground}>
-                    <View
-                      style={[
-                        styles.scoreBarFill,
-                        {
-                          width: `${item.score * 100}%`,
-                          backgroundColor: index === 0 ? "#4caf50" : "#9e9e9e",
-                        },
-                      ]}
-                    />
-                  </View>
-                </View>
-              ))}
-            </View>
-          </View>
-        )}
-
-        {/* BiLSTM Anomaly Detection Results */}
-        {bilstmResult && (
-          <View style={styles.resultCard}>
-            <Text style={styles.sectionTitle}>Gait Anomaly Detection</Text>
-
-            {/* Anomaly Status */}
+            {/* Pattern Analysis - Most Important First */}
             <View
               style={[
-                styles.predictionBox,
+                styles.resultBox,
                 {
                   backgroundColor: bilstmResult.isAbnormal
-                    ? "#ffebee"
+                    ? "#fff3e0"
                     : "#e8f5e9",
                 },
               ]}
             >
-              <Text style={styles.predictionLabel}>Detection Result:</Text>
+              <Text style={styles.resultLabel}>Pattern Analysis</Text>
               <Text
                 style={[
-                  styles.predictionClass,
-                  { color: bilstmResult.isAbnormal ? "#c62828" : "#2e7d32" },
+                  styles.resultValue,
+                  { color: bilstmResult.isAbnormal ? "#ef6c00" : "#2e7d32" },
                 ]}
               >
-                {bilstmResult.isAbnormal ? "ABNORMAL GAIT" : "NORMAL GAIT"}
-              </Text>
-              <Text
-                style={[
-                  styles.confidenceText,
-                  { color: bilstmResult.isAbnormal ? "#c62828" : "#2e7d32" },
-                ]}
-              >
-                Confidence: {bilstmResult.confidence.toFixed(2)}%
+                {bilstmResult.isAbnormal
+                  ? "Irregular pattern detected"
+                  : "Normal pattern"}
               </Text>
             </View>
 
-            {/* Detection Details */}
-            <View style={styles.detailsContainer}>
-              <Text style={styles.scoresTitle}>Detection Details:</Text>
-              <View style={styles.detailRow}>
-                <Text style={styles.detailLabel}>Reconstruction Error:</Text>
-                <Text style={styles.detailValue}>
-                  {bilstmResult.maxError.toFixed(6)}
-                </Text>
-              </View>
-              <View style={styles.detailRow}>
-                <Text style={styles.detailLabel}>Detection Threshold:</Text>
-                <Text style={styles.detailValue}>
-                  {bilstmResult.threshold.toFixed(6)}
-                </Text>
-              </View>
-              <View style={styles.detailRow}>
-                <Text style={styles.detailLabel}>Mean Error:</Text>
-                <Text style={styles.detailValue}>
-                  {bilstmResult.meanError.toFixed(6)}
-                </Text>
-              </View>
-              <View style={styles.detailRow}>
-                <Text style={styles.detailLabel}>Windows Analyzed:</Text>
-                <Text style={styles.detailValue}>
-                  {bilstmResult.numWindows}
-                </Text>
-              </View>
-            </View>
-
-            {/* Error visualization bar */}
-            <View style={styles.errorVisualization}>
-              <Text style={styles.errorLabel}>Error vs Threshold:</Text>
-              <View style={styles.errorBarContainer}>
-                <View style={styles.thresholdLine} />
-                <View
-                  style={[
-                    styles.errorBar,
-                    {
-                      width: `${Math.min(
-                        100,
-                        (bilstmResult.maxError / bilstmResult.threshold) * 100
-                      )}%`,
-                      backgroundColor: bilstmResult.isAbnormal
-                        ? "#c62828"
-                        : "#2e7d32",
-                    },
-                  ]}
-                />
-              </View>
+            {/* Gait Type - Secondary Detail */}
+            <View
+              style={[
+                styles.resultBox,
+                {
+                  backgroundColor: bilstmResult.isAbnormal
+                    ? "#fff3e0"
+                    : "#e8f5e9",
+                },
+              ]}
+            >
+              <Text style={styles.resultLabel}>Gait Type</Text>
+              <Text
+                style={[
+                  styles.resultValue,
+                  { color: bilstmResult.isAbnormal ? "#ef6c00" : "#2e7d32" },
+                ]}
+              >
+                {cnnResult.predictedClass}
+              </Text>
+              <Text
+                style={[
+                  styles.resultConfidence,
+                  { color: bilstmResult.isAbnormal ? "#ef6c00" : "#2e7d32" },
+                ]}
+              >
+                {(cnnResult.confidence * 100).toFixed(0)}% confidence
+              </Text>
             </View>
           </View>
         )}
@@ -187,7 +114,7 @@ export function PipelineResultsScreen({
         {/* SEI Image Preview */}
         {seiPng && (
           <View style={styles.resultCard}>
-            <Text style={styles.sectionTitle}>Spatial Encoded Image (SEI)</Text>
+            <Text style={styles.sectionTitle}>Gait Pattern</Text>
             <View style={styles.seiContainer}>
               <Image
                 source={{ uri: "data:image/jpeg;base64," + seiPng }}
@@ -195,8 +122,7 @@ export function PipelineResultsScreen({
                 resizeMode="contain"
               />
               <Text style={styles.seiDescription}>
-                This image represents the spatial patterns of your gait across
-                all frames
+                Visual representation of your walking pattern
               </Text>
             </View>
           </View>
@@ -216,7 +142,7 @@ export function PipelineResultsScreen({
           {onExportResults && (
             <View style={styles.buttonWrapper}>
               <Button
-                title="Export Raw Data"
+                title="Export Details"
                 onPress={onExportResults}
                 color="#007AFF"
               />
@@ -289,66 +215,30 @@ const styles = StyleSheet.create({
     color: "#333",
     marginBottom: 16,
   },
-  predictionBox: {
-    backgroundColor: "#e8f5e9",
+  resultBox: {
     borderRadius: 8,
-    padding: 16,
-    marginBottom: 20,
-    alignItems: "center",
-  },
-  predictionLabel: {
-    fontSize: 14,
-    color: "#666",
-    marginBottom: 8,
-  },
-  predictionClass: {
-    fontSize: 24,
-    fontWeight: "bold",
-    color: "#2e7d32",
-    marginBottom: 8,
-  },
-  confidenceText: {
-    fontSize: 18,
-    color: "#2e7d32",
-  },
-  scoresContainer: {
-    marginTop: 8,
-  },
-  scoresTitle: {
-    fontSize: 16,
-    fontWeight: "600",
-    color: "#333",
-    marginBottom: 12,
-  },
-  scoreRow: {
+    padding: 20,
     marginBottom: 16,
-  },
-  scoreHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
     alignItems: "center",
-    marginBottom: 6,
   },
-  scoreLabel: {
+  resultLabel: {
     fontSize: 14,
-    fontWeight: "500",
-    color: "#333",
-  },
-  scoreValue: {
-    fontSize: 14,
-    fontWeight: "600",
     color: "#666",
+    marginBottom: 12,
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
   },
-  scoreBarBackground: {
-    height: 8,
-    backgroundColor: "#e0e0e0",
-    borderRadius: 4,
-    overflow: "hidden",
+  resultValue: {
+    fontSize: 20,
+    fontWeight: "bold",
+    marginBottom: 8,
+    textAlign: "center",
   },
-  scoreBarFill: {
-    height: "100%",
-    borderRadius: 4,
+  resultConfidence: {
+    fontSize: 16,
+    fontWeight: "500",
   },
+
   seiContainer: {
     alignItems: "center",
   },
@@ -373,52 +263,5 @@ const styles = StyleSheet.create({
   },
   buttonWrapper: {
     marginVertical: 8,
-  },
-  detailsContainer: {
-    marginTop: 12,
-  },
-  detailRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginBottom: 8,
-    paddingHorizontal: 4,
-  },
-  detailLabel: {
-    fontSize: 14,
-    color: "#666",
-  },
-  detailValue: {
-    fontSize: 14,
-    fontWeight: "600",
-    color: "#333",
-  },
-  errorVisualization: {
-    marginTop: 16,
-  },
-  errorLabel: {
-    fontSize: 13,
-    color: "#666",
-    marginBottom: 8,
-  },
-  errorBarContainer: {
-    height: 24,
-    backgroundColor: "#f0f0f0",
-    borderRadius: 4,
-    position: "relative",
-    overflow: "hidden",
-  },
-  thresholdLine: {
-    position: "absolute",
-    left: "100%",
-    top: 0,
-    bottom: 0,
-    width: 2,
-    backgroundColor: "#ff9800",
-    zIndex: 2,
-  },
-  errorBar: {
-    height: "100%",
-    borderRadius: 4,
   },
 });

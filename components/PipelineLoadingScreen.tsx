@@ -33,6 +33,36 @@ export function PipelineLoadingScreen({
     }
   }, [logs]);
 
+  // Determine current step based on logs
+  const getCurrentStep = () => {
+    const lastLog = logs[logs.length - 1] || "";
+    if (lastLog.includes("Step 4") || lastLog.includes("Classification"))
+      return 4;
+    if (lastLog.includes("Step 3") || lastLog.includes("SEI")) return 3;
+    if (
+      lastLog.includes("Step 2") ||
+      lastLog.includes("BiLSTM") ||
+      lastLog.includes("Anomaly")
+    )
+      return 2;
+    if (
+      lastLog.includes("Step 1") ||
+      lastLog.includes("keypoint") ||
+      lastLog.includes("Processing frame")
+    )
+      return 1;
+    if (lastLog.includes("completed successfully")) return 5;
+    return 0;
+  };
+
+  const currentStep = getCurrentStep();
+  const steps = [
+    { id: 1, label: "Analyzing motion" },
+    { id: 2, label: "Detecting patterns" },
+    { id: 3, label: "Generating visualization" },
+    { id: 4, label: "Classifying gait" },
+  ];
+
   return (
     <View style={styles.container}>
       <View style={styles.content}>
@@ -44,68 +74,43 @@ export function PipelineLoadingScreen({
         />
 
         {/* Title */}
-        <Text style={styles.title}>Processing Video</Text>
-        <Text style={styles.subtitle}>
-          Please wait while we analyze your video...
-        </Text>
+        <Text style={styles.title}>Analyzing Gait</Text>
+        <Text style={styles.subtitle}>This may take a few moments...</Text>
 
-        {/* Download Progress Indicator */}
-        {downloadStatus && downloadStatus.status !== "complete" && (
-          <View style={styles.downloadContainer}>
-            <Text style={styles.downloadTitle}>Loading MediaPipe Models</Text>
-            <Text style={styles.downloadFileName}>
-              {downloadStatus.fileName}
-            </Text>
-            <View style={styles.progressBarContainer}>
+        {/* Progress Steps */}
+        <View style={styles.stepsContainer}>
+          {steps.map((step) => (
+            <View key={step.id} style={styles.stepItem}>
               <View
                 style={[
-                  styles.progressBarFill,
-                  { width: `${downloadStatus.percent || 0}%` },
+                  styles.stepIndicator,
+                  currentStep > step.id && styles.stepIndicatorComplete,
+                  currentStep === step.id && styles.stepIndicatorActive,
                 ]}
-              />
+              >
+                {currentStep > step.id ? (
+                  <Text style={styles.stepCheckmark}>✓</Text>
+                ) : (
+                  <Text
+                    style={[
+                      styles.stepNumber,
+                      currentStep === step.id && styles.stepNumberActive,
+                    ]}
+                  >
+                    {step.id}
+                  </Text>
+                )}
+              </View>
+              <Text
+                style={[
+                  styles.stepLabel,
+                  currentStep >= step.id && styles.stepLabelActive,
+                ]}
+              >
+                {step.label}
+              </Text>
             </View>
-            <View style={styles.downloadStats}>
-              <Text style={styles.downloadStatsText}>
-                {downloadStatus.percent
-                  ? `${downloadStatus.percent.toFixed(1)}%`
-                  : "Starting..."}
-              </Text>
-              <Text style={styles.downloadStatsText}>
-                File {downloadStatus.loaded + 1} of {downloadStatus.total}
-              </Text>
-            </View>
-            {downloadStatus.receivedBytes && downloadStatus.totalBytes && (
-              <Text style={styles.downloadBytes}>
-                {(downloadStatus.receivedBytes / 1024 / 1024).toFixed(2)} MB /{" "}
-                {(downloadStatus.totalBytes / 1024 / 1024).toFixed(2)} MB
-              </Text>
-            )}
-          </View>
-        )}
-
-        {/* WebView is managed in parent component (index.tsx) - don't recreate it here */}
-
-        {/* Logs Container */}
-        <View style={styles.logsContainer}>
-          <ScrollView
-            ref={scrollViewRef}
-            style={styles.logsScrollView}
-            contentContainerStyle={styles.logsContent}
-            showsVerticalScrollIndicator={true}
-            onContentSizeChange={() =>
-              scrollViewRef.current?.scrollToEnd({ animated: true })
-            }
-          >
-            {logs.length === 0 ? (
-              <Text style={styles.logText}>Initializing...</Text>
-            ) : (
-              logs.map((log, index) => (
-                <Text key={index} style={styles.logText}>
-                  {log}
-                </Text>
-              ))
-            )}
-          </ScrollView>
+          ))}
         </View>
       </View>
     </View>
@@ -148,81 +153,56 @@ const styles = StyleSheet.create({
   subtitle: {
     fontSize: 16,
     color: "#666",
-    marginBottom: 24,
+    marginBottom: 32,
     textAlign: "center",
   },
-  logsContainer: {
+  stepsContainer: {
     width: "100%",
-    height: 300,
-    backgroundColor: "#f8f8f8",
-    borderRadius: 8,
-    borderWidth: 1,
+    gap: 16,
+  },
+  stepItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+  },
+  stepIndicator: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: "#f0f0f0",
+    borderWidth: 2,
     borderColor: "#e0e0e0",
-    overflow: "hidden",
+    alignItems: "center",
+    justifyContent: "center",
   },
-  logsScrollView: {
-    flex: 1,
-  },
-  logsContent: {
-    padding: 16,
-  },
-  logText: {
-    fontSize: 13,
-    fontFamily: "monospace",
-    color: "#333",
-    marginBottom: 4,
-    lineHeight: 18,
-  },
-  downloadContainer: {
-    width: "100%",
-    backgroundColor: "#f0f7ff",
-    borderRadius: 8,
-    padding: 16,
-    marginBottom: 20,
-    borderWidth: 1,
+  stepIndicatorActive: {
+    backgroundColor: "#e3f2fd",
     borderColor: "#007AFF",
   },
-  downloadTitle: {
+  stepIndicatorComplete: {
+    backgroundColor: "#007AFF",
+    borderColor: "#007AFF",
+  },
+  stepNumber: {
     fontSize: 16,
     fontWeight: "600",
-    color: "#007AFF",
-    marginBottom: 8,
-    textAlign: "center",
-  },
-  downloadFileName: {
-    fontSize: 13,
-    color: "#666",
-    marginBottom: 12,
-    textAlign: "center",
-    fontFamily: "monospace",
-  },
-  progressBarContainer: {
-    width: "100%",
-    height: 8,
-    backgroundColor: "#e0e0e0",
-    borderRadius: 4,
-    overflow: "hidden",
-    marginBottom: 8,
-  },
-  progressBarFill: {
-    height: "100%",
-    backgroundColor: "#007AFF",
-    borderRadius: 4,
-  },
-  downloadStats: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    marginTop: 4,
-  },
-  downloadStatsText: {
-    fontSize: 12,
-    color: "#666",
-    fontWeight: "500",
-  },
-  downloadBytes: {
-    fontSize: 11,
     color: "#999",
-    textAlign: "center",
-    marginTop: 4,
+  },
+  stepNumberActive: {
+    color: "#007AFF",
+  },
+  stepCheckmark: {
+    fontSize: 18,
+    color: "#fff",
+    fontWeight: "bold",
+  },
+  stepLabel: {
+    fontSize: 16,
+    color: "#999",
+    flex: 1,
+  },
+  stepLabelActive: {
+    color: "#333",
+    fontWeight: "500",
   },
 });

@@ -165,6 +165,11 @@ export default function Tab() {
   const addLog = (message: string) => {
     const timestamp = new Date().toLocaleTimeString();
     const logMessage = `[${timestamp}] ${message}`;
+
+    // Log to console for debugging
+    console.log(logMessage);
+
+    // Store in array for step detection in UI
     logsRef.current = [...logsRef.current, logMessage];
     setPipelineLogs([...logsRef.current]);
   };
@@ -333,11 +338,15 @@ export default function Tab() {
       // Step 2: BiLSTM Anomaly Detection
       addLog("Step 2: Running BiLSTM anomaly detection...");
 
-      if (!keypointResult?.outputFile) {
-        throw new Error("Keypoint output file not available");
+      if (!keypointResult) {
+        throw new Error("Keypoint extraction failed - no result");
       }
 
-      const anomalyResult = await detectGaitAnomaly(keypointResult.outputFile);
+      // Type assertion to help TypeScript understand keypointResult is not null
+      const validKeypointResult = keypointResult as PoseResult;
+      const anomalyResult = await detectGaitAnomaly(
+        validKeypointResult.outputFile
+      );
       setBilstmResult(anomalyResult);
 
       addLog(`  ✓ BiLSTM detection complete!`);
@@ -649,18 +658,47 @@ export default function Tab() {
             </View>
           </View>
         </ScrollView>
+      ) : !webViewReady || !cnnModelReady || !bilstmModelReady ? (
+        // Initial Loading Screen
+        <View style={styles.initialLoadingContainer}>
+          <Text style={styles.appTitle}>Gait Analysis</Text>
+          <ActivityIndicator
+            size="large"
+            color="#007AFF"
+            style={styles.loadingSpinner}
+          />
+          <Text style={styles.initialLoadingTitle}>
+            Preparing Analysis Tools...
+          </Text>
+          <Text style={styles.loadingSubtext}>
+            This will only take a moment
+          </Text>
+        </View>
       ) : (
         <ScrollView style={styles.scrollContainer}>
           <View style={styles.container}>
-            <View style={styles.videoContainer}>
-              <Text style={styles.stepTitle}>Step 1: Upload Video</Text>
-              <VideoPicker onPress={pickVideo} isCompressing={isCompressing} />
+            <Text style={styles.sectionTitle}>Gait Analysis</Text>
+            <Text style={styles.sectionSubtitle}>
+              {videoUri
+                ? "Video ready for analysis"
+                : "Select a video to begin"}
+            </Text>
+
+            {!videoUri || isCompressing ? (
+              <View style={styles.videoContainer}>
+                <VideoPicker
+                  onPress={pickVideo}
+                  isCompressing={isCompressing}
+                />
+              </View>
+            ) : (
               <VideoPreview
                 uri={videoUri}
                 fileName={fileName}
                 player={player}
+                onChangeVideo={pickVideo}
               />
-            </View>
+            )}
 
             {/* Next Button */}
             <View style={styles.nextButtonContainer}>
@@ -684,7 +722,7 @@ export default function Tab() {
                 <Text style={styles.nextButtonText}>
                   {!webViewReady || !cnnModelReady || !bilstmModelReady
                     ? "Loading models..."
-                    : "Next - Start Analysis"}
+                    : "Start Analysis"}
                 </Text>
               </TouchableOpacity>
               {(!webViewReady || !cnnModelReady || !bilstmModelReady) && (
@@ -732,13 +770,11 @@ export default function Tab() {
                       <ActivityIndicator size="large" />
                       <Text style={styles.progressText}>
                         Processing...
-                        {/* @ts-expect-error - progress is checked before use */}
-                        {progress && typeof progress.frameIndex === "number"
-                          ? ` ${progress.frameIndex} frames`
+                        {progress?.frameIndex
+                          ? ` ${progress!.frameIndex} frames`
                           : ""}
-                        {/* @ts-expect-error - progress is checked before use */}
-                        {progress && typeof progress.percent === "number"
-                          ? ` (${Math.round(progress.percent)}%)`
+                        {typeof progress?.percent === "number"
+                          ? ` (${Math.round(progress!.percent!)}%)`
                           : ""}
                       </Text>
                     </View>
@@ -914,6 +950,19 @@ const styles = StyleSheet.create({
     padding: 32,
     alignItems: "center",
   },
+  sectionTitle: {
+    fontSize: 28,
+    fontWeight: "bold",
+    color: "#333",
+    marginBottom: 8,
+    textAlign: "center",
+  },
+  sectionSubtitle: {
+    fontSize: 16,
+    color: "#666",
+    marginBottom: 24,
+    textAlign: "center",
+  },
   stepTitle: {
     fontSize: 24,
     fontWeight: "bold",
@@ -1076,5 +1125,56 @@ const styles = StyleSheet.create({
     color: "#fff",
     fontSize: 16,
     fontWeight: "600",
+  },
+  initialLoadingContainer: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    backgroundColor: "#f5f5f5",
+    padding: 20,
+  },
+  appTitle: {
+    fontSize: 28,
+    fontWeight: "bold",
+    color: "#007AFF",
+    marginBottom: 40,
+  },
+  loadingSpinner: {
+    marginBottom: 20,
+  },
+  initialLoadingTitle: {
+    fontSize: 20,
+    fontWeight: "600",
+    color: "#333",
+    marginBottom: 30,
+  },
+  loadingDetailsContainer: {
+    width: "80%",
+    maxWidth: 300,
+    backgroundColor: "#fff",
+    borderRadius: 12,
+    padding: 20,
+    marginBottom: 20,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  loadingItem: {
+    flexDirection: "row",
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: "#f0f0f0",
+  },
+  loadingItemText: {
+    fontSize: 16,
+    color: "#666",
+  },
+  loadingSubtext: {
+    fontSize: 14,
+    color: "#999",
+    textAlign: "center",
+    marginTop: 10,
   },
 });

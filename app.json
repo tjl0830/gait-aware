@@ -57,8 +57,9 @@
     "extra": {
       "router": {},
       "eas": {
-        "projectId": "38c39864-c47a-4dd2-a0fa-df6368ec3b55"
+        "projectId": "45c210cc-4f68-4a91-b35a-d0f6c220ae4f"
       }
-    }
+    },
+    "owner": "caelianzspn"
   }
-}
+} 
