@@ -29,10 +29,10 @@ export function useVideoPickerLogic() {
       const assets = (result as any).assets ?? [];
       const asset = assets[0];
 
-      // Check duration limit (10 seconds)
-      if (asset.duration > 10000) {
+      // Check duration limit (11 seconds)
+      if (asset.duration > 10999) {
         Alert.alert(
-          'Video too long',
+          'Video too long', 
           'Please select a video that is 10 seconds or less.'
         );
         return;

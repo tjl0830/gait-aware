@@ -1,11 +1,26 @@
-import React from 'react';
-import { Button, Image, ScrollView, StyleSheet, Text, View } from 'react-native';
+import React from "react";
+import {
+  Button,
+  Image,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
+} from "react-native";
 
 interface PipelineResultsScreenProps {
   cnnResult: {
     predictedClass: string;
     confidence: number;
     allScores: { label: string; score: number }[];
+  } | null;
+  bilstmResult: {
+    isAbnormal: boolean;
+    meanError: number;
+    maxError: number;
+    numWindows: number;
+    threshold: number;
+    confidence: number;
   } | null;
   seiPng: string | null;
   videoFileName?: string;
@@ -14,13 +29,14 @@ interface PipelineResultsScreenProps {
   onSaveReport?: () => void;
 }
 
-export function PipelineResultsScreen({ 
-  cnnResult, 
-  seiPng, 
+export function PipelineResultsScreen({
+  cnnResult,
+  bilstmResult,
+  seiPng,
   videoFileName,
   onExportResults,
   onStartNew,
-  onSaveReport 
+  onSaveReport,
 }: PipelineResultsScreenProps) {
   return (
     <ScrollView style={styles.scrollContainer}>
@@ -30,7 +46,9 @@ export function PipelineResultsScreen({
           <Text style={styles.successIcon}>✓</Text>
           <Text style={styles.title}>Analysis Complete!</Text>
           <Text style={styles.subtitle}>
-            {videoFileName ? `Results for: ${videoFileName}` : 'Gait analysis completed successfully'}
+            {videoFileName
+              ? `Results for: ${videoFileName}`
+              : "Gait analysis completed successfully"}
           </Text>
         </View>
 
@@ -38,11 +56,13 @@ export function PipelineResultsScreen({
         {cnnResult && (
           <View style={styles.resultCard}>
             <Text style={styles.sectionTitle}>Gait Classification</Text>
-            
+
             {/* Predicted Class */}
             <View style={styles.predictionBox}>
               <Text style={styles.predictionLabel}>Predicted Diagnosis:</Text>
-              <Text style={styles.predictionClass}>{cnnResult.predictedClass}</Text>
+              <Text style={styles.predictionClass}>
+                {cnnResult.predictedClass}
+              </Text>
               <Text style={styles.confidenceText}>
                 Confidence: {(cnnResult.confidence * 100).toFixed(2)}%
               </Text>
@@ -60,18 +80,106 @@ export function PipelineResultsScreen({
                     </Text>
                   </View>
                   <View style={styles.scoreBarBackground}>
-                    <View 
+                    <View
                       style={[
-                        styles.scoreBarFill, 
-                        { 
+                        styles.scoreBarFill,
+                        {
                           width: `${item.score * 100}%`,
-                          backgroundColor: index === 0 ? '#4caf50' : '#9e9e9e'
-                        }
-                      ]} 
+                          backgroundColor: index === 0 ? "#4caf50" : "#9e9e9e",
+                        },
+                      ]}
                     />
                   </View>
                 </View>
               ))}
+            </View>
+          </View>
+        )}
+
+        {/* BiLSTM Anomaly Detection Results */}
+        {bilstmResult && (
+          <View style={styles.resultCard}>
+            <Text style={styles.sectionTitle}>Gait Anomaly Detection</Text>
+
+            {/* Anomaly Status */}
+            <View
+              style={[
+                styles.predictionBox,
+                {
+                  backgroundColor: bilstmResult.isAbnormal
+                    ? "#ffebee"
+                    : "#e8f5e9",
+                },
+              ]}
+            >
+              <Text style={styles.predictionLabel}>Detection Result:</Text>
+              <Text
+                style={[
+                  styles.predictionClass,
+                  { color: bilstmResult.isAbnormal ? "#c62828" : "#2e7d32" },
+                ]}
+              >
+                {bilstmResult.isAbnormal ? "ABNORMAL GAIT" : "NORMAL GAIT"}
+              </Text>
+              <Text
+                style={[
+                  styles.confidenceText,
+                  { color: bilstmResult.isAbnormal ? "#c62828" : "#2e7d32" },
+                ]}
+              >
+                Confidence: {bilstmResult.confidence.toFixed(2)}%
+              </Text>
+            </View>
+
+            {/* Detection Details */}
+            <View style={styles.detailsContainer}>
+              <Text style={styles.scoresTitle}>Detection Details:</Text>
+              <View style={styles.detailRow}>
+                <Text style={styles.detailLabel}>Reconstruction Error:</Text>
+                <Text style={styles.detailValue}>
+                  {bilstmResult.maxError.toFixed(6)}
+                </Text>
+              </View>
+              <View style={styles.detailRow}>
+                <Text style={styles.detailLabel}>Detection Threshold:</Text>
+                <Text style={styles.detailValue}>
+                  {bilstmResult.threshold.toFixed(6)}
+                </Text>
+              </View>
+              <View style={styles.detailRow}>
+                <Text style={styles.detailLabel}>Mean Error:</Text>
+                <Text style={styles.detailValue}>
+                  {bilstmResult.meanError.toFixed(6)}
+                </Text>
+              </View>
+              <View style={styles.detailRow}>
+                <Text style={styles.detailLabel}>Windows Analyzed:</Text>
+                <Text style={styles.detailValue}>
+                  {bilstmResult.numWindows}
+                </Text>
+              </View>
+            </View>
+
+            {/* Error visualization bar */}
+            <View style={styles.errorVisualization}>
+              <Text style={styles.errorLabel}>Error vs Threshold:</Text>
+              <View style={styles.errorBarContainer}>
+                <View style={styles.thresholdLine} />
+                <View
+                  style={[
+                    styles.errorBar,
+                    {
+                      width: `${Math.min(
+                        100,
+                        (bilstmResult.maxError / bilstmResult.threshold) * 100
+                      )}%`,
+                      backgroundColor: bilstmResult.isAbnormal
+                        ? "#c62828"
+                        : "#2e7d32",
+                    },
+                  ]}
+                />
+              </View>
             </View>
           </View>
         )}
@@ -82,12 +190,13 @@ export function PipelineResultsScreen({
             <Text style={styles.sectionTitle}>Spatial Encoded Image (SEI)</Text>
             <View style={styles.seiContainer}>
               <Image
-                source={{ uri: 'data:image/jpeg;base64,' + seiPng }}
+                source={{ uri: "data:image/jpeg;base64," + seiPng }}
                 style={styles.seiImage}
                 resizeMode="contain"
               />
               <Text style={styles.seiDescription}>
-                This image represents the spatial patterns of your gait across all frames
+                This image represents the spatial patterns of your gait across
+                all frames
               </Text>
             </View>
           </View>
@@ -97,8 +206,8 @@ export function PipelineResultsScreen({
         <View style={styles.actionsContainer}>
           {onSaveReport && (
             <View style={styles.buttonWrapper}>
-              <Button 
-                title="Save Report" 
+              <Button
+                title="Save Report"
                 onPress={onSaveReport}
                 color="#FF9500"
               />
@@ -106,8 +215,8 @@ export function PipelineResultsScreen({
           )}
           {onExportResults && (
             <View style={styles.buttonWrapper}>
-              <Button 
-                title="Export Raw Data" 
+              <Button
+                title="Export Raw Data"
                 onPress={onExportResults}
                 color="#007AFF"
               />
@@ -115,8 +224,8 @@ export function PipelineResultsScreen({
           )}
           {onStartNew && (
             <View style={styles.buttonWrapper}>
-              <Button 
-                title="Analyze New Video" 
+              <Button
+                title="Analyze New Video"
                 onPress={onStartNew}
                 color="#34C759"
               />
@@ -131,41 +240,41 @@ export function PipelineResultsScreen({
 const styles = StyleSheet.create({
   scrollContainer: {
     flex: 1,
-    backgroundColor: '#f5f5f5',
+    backgroundColor: "#f5f5f5",
   },
   container: {
     padding: 20,
-    alignItems: 'center',
+    alignItems: "center",
   },
   header: {
-    alignItems: 'center',
+    alignItems: "center",
     marginBottom: 24,
     paddingVertical: 20,
   },
   successIcon: {
     fontSize: 64,
-    color: '#4caf50',
+    color: "#4caf50",
     marginBottom: 16,
   },
   title: {
     fontSize: 28,
-    fontWeight: 'bold',
-    color: '#333',
+    fontWeight: "bold",
+    color: "#333",
     marginBottom: 8,
   },
   subtitle: {
     fontSize: 16,
-    color: '#666',
-    textAlign: 'center',
+    color: "#666",
+    textAlign: "center",
   },
   resultCard: {
-    width: '100%',
+    width: "100%",
     maxWidth: 600,
-    backgroundColor: '#fff',
+    backgroundColor: "#fff",
     borderRadius: 12,
     padding: 20,
     marginBottom: 16,
-    shadowColor: '#000',
+    shadowColor: "#000",
     shadowOffset: {
       width: 0,
       height: 2,
@@ -176,93 +285,140 @@ const styles = StyleSheet.create({
   },
   sectionTitle: {
     fontSize: 20,
-    fontWeight: 'bold',
-    color: '#333',
+    fontWeight: "bold",
+    color: "#333",
     marginBottom: 16,
   },
   predictionBox: {
-    backgroundColor: '#e8f5e9',
+    backgroundColor: "#e8f5e9",
     borderRadius: 8,
     padding: 16,
     marginBottom: 20,
-    alignItems: 'center',
+    alignItems: "center",
   },
   predictionLabel: {
     fontSize: 14,
-    color: '#666',
+    color: "#666",
     marginBottom: 8,
   },
   predictionClass: {
     fontSize: 24,
-    fontWeight: 'bold',
-    color: '#2e7d32',
+    fontWeight: "bold",
+    color: "#2e7d32",
     marginBottom: 8,
   },
   confidenceText: {
     fontSize: 18,
-    color: '#2e7d32',
+    color: "#2e7d32",
   },
   scoresContainer: {
     marginTop: 8,
   },
   scoresTitle: {
     fontSize: 16,
-    fontWeight: '600',
-    color: '#333',
+    fontWeight: "600",
+    color: "#333",
     marginBottom: 12,
   },
   scoreRow: {
     marginBottom: 16,
   },
   scoreHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
     marginBottom: 6,
   },
   scoreLabel: {
     fontSize: 14,
-    fontWeight: '500',
-    color: '#333',
+    fontWeight: "500",
+    color: "#333",
   },
   scoreValue: {
     fontSize: 14,
-    fontWeight: '600',
-    color: '#666',
+    fontWeight: "600",
+    color: "#666",
   },
   scoreBarBackground: {
     height: 8,
-    backgroundColor: '#e0e0e0',
+    backgroundColor: "#e0e0e0",
     borderRadius: 4,
-    overflow: 'hidden',
+    overflow: "hidden",
   },
   scoreBarFill: {
-    height: '100%',
+    height: "100%",
     borderRadius: 4,
   },
   seiContainer: {
-    alignItems: 'center',
+    alignItems: "center",
   },
   seiImage: {
     width: 224,
     height: 224,
     borderWidth: 1,
-    borderColor: '#ddd',
+    borderColor: "#ddd",
     borderRadius: 8,
     marginBottom: 12,
   },
   seiDescription: {
     fontSize: 13,
-    color: '#666',
-    textAlign: 'center',
-    fontStyle: 'italic',
+    color: "#666",
+    textAlign: "center",
+    fontStyle: "italic",
   },
   actionsContainer: {
-    width: '100%',
+    width: "100%",
     maxWidth: 600,
     marginTop: 8,
   },
   buttonWrapper: {
     marginVertical: 8,
+  },
+  detailsContainer: {
+    marginTop: 12,
+  },
+  detailRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 8,
+    paddingHorizontal: 4,
+  },
+  detailLabel: {
+    fontSize: 14,
+    color: "#666",
+  },
+  detailValue: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: "#333",
+  },
+  errorVisualization: {
+    marginTop: 16,
+  },
+  errorLabel: {
+    fontSize: 13,
+    color: "#666",
+    marginBottom: 8,
+  },
+  errorBarContainer: {
+    height: 24,
+    backgroundColor: "#f0f0f0",
+    borderRadius: 4,
+    position: "relative",
+    overflow: "hidden",
+  },
+  thresholdLine: {
+    position: "absolute",
+    left: "100%",
+    top: 0,
+    bottom: 0,
+    width: 2,
+    backgroundColor: "#ff9800",
+    zIndex: 2,
+  },
+  errorBar: {
+    height: "100%",
+    borderRadius: 4,
   },
 });
