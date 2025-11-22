@@ -229,6 +229,14 @@ function preprocessFeatures(features: number[][]): number[][] {
     transposed.push(featureColumn);
   }
 
+  // Debug: Check raw features before preprocessing
+  console.log(
+    `[BiLSTM] Raw features (first frame, first 3): [${features[0]
+      .slice(0, 3)
+      .map((v) => v.toFixed(4))
+      .join(", ")}]`
+  );
+
   // Interpolate and smooth each feature
   const processed: number[][] = transposed.map((featureColumn) => {
     const interpolated = interpolateNaN(featureColumn);
@@ -245,6 +253,14 @@ function preprocessFeatures(features: number[][]): number[][] {
     }
     result.push(frame);
   }
+
+  // Debug: Check preprocessed features
+  console.log(
+    `[BiLSTM] Preprocessed features (first frame, first 3): [${result[0]
+      .slice(0, 3)
+      .map((v) => v.toFixed(4))
+      .join(", ")}]`
+  );
 
   return result;
 }
@@ -284,6 +300,14 @@ function normalizeFeatures(features: number[][]): number[][] {
     }
     normalized.push(frame);
   }
+
+  // Debug: Check normalized features
+  console.log(
+    `[BiLSTM] Normalized features (first frame, first 3): [${normalized[0]
+      .slice(0, 3)
+      .map((v) => v.toFixed(4))
+      .join(", ")}]`
+  );
 
   return normalized;
 }
@@ -367,13 +391,48 @@ export async function detectGaitAnomaly(poseJsonPath: string): Promise<{
     const inputTensor = tf.tensor3d(windows); // Shape: [numWindows, 60, 16]
 
     console.log(`[BiLSTM] Input tensor shape: ${inputTensor.shape}`);
+    console.log(`[BiLSTM] Input tensor dtype: ${inputTensor.dtype}`);
+
+    // Debug: Print first window, first frame, first 3 features
+    const debugData = await inputTensor.slice([0, 0, 0], [1, 1, 3]).data();
+    console.log(
+      `[BiLSTM] First window, first frame, first 3 features: [${Array.from(
+        debugData
+      )
+        .map((v) => v.toFixed(4))
+        .join(", ")}]`
+    );
 
     // Step 6: Run inference (reconstruction)
     const reconstructionTensor = model.predict(inputTensor) as tf.Tensor;
 
+    console.log(
+      `[BiLSTM] Reconstruction tensor shape: ${reconstructionTensor.shape}`
+    );
+    console.log(
+      `[BiLSTM] Reconstruction tensor dtype: ${reconstructionTensor.dtype}`
+    );
+
+    // Debug: Print reconstructed values for same position
+    const debugRecon = await reconstructionTensor
+      .slice([0, 0, 0], [1, 1, 3])
+      .data();
+    console.log(
+      `[BiLSTM] Reconstructed first 3 features: [${Array.from(debugRecon)
+        .map((v) => v.toFixed(4))
+        .join(", ")}]`
+    );
+
     // Step 7: Calculate reconstruction errors for each window
     const errorTensor = tf.square(tf.sub(inputTensor, reconstructionTensor));
     const windowErrors = await tf.mean(errorTensor, [1, 2]).data(); // Mean per window
+
+    // Debug: Print individual window errors
+    console.log(
+      `[BiLSTM] Individual window errors: [${Array.from(windowErrors)
+        .map((v) => v.toFixed(6))
+        .join(", ")}]`
+    );
 
     // Cleanup tensors
     inputTensor.dispose();
@@ -385,8 +444,9 @@ export async function detectGaitAnomaly(poseJsonPath: string): Promise<{
       Array.from(windowErrors).reduce((a, b) => a + b, 0) / windowErrors.length;
     const maxError = Math.max(...Array.from(windowErrors));
 
-    // Step 9: Classify (abnormal if ANY window exceeds threshold)
-    const isAbnormal = maxError >= CONFIG.THRESHOLD;
+    // Step 9: Classify based on MEAN error (matching Python implementation)
+    // CRITICAL: Python uses mean_error >= threshold, NOT max_error
+    const isAbnormal = meanError >= CONFIG.THRESHOLD;
 
     // Calculate confidence based on distance from threshold
     // For normal gait: confidence increases as error decreases below threshold
@@ -394,11 +454,11 @@ export async function detectGaitAnomaly(poseJsonPath: string): Promise<{
     let confidence: number;
     if (isAbnormal) {
       // Abnormal: confidence = how much we exceeded threshold (as percentage)
-      const excessRatio = (maxError - CONFIG.THRESHOLD) / CONFIG.THRESHOLD;
+      const excessRatio = (meanError - CONFIG.THRESHOLD) / CONFIG.THRESHOLD;
       confidence = Math.min(100, 50 + excessRatio * 50); // 50-100%
     } else {
       // Normal: confidence = how far below threshold (as percentage)
-      const safetyRatio = (CONFIG.THRESHOLD - maxError) / CONFIG.THRESHOLD;
+      const safetyRatio = (CONFIG.THRESHOLD - meanError) / CONFIG.THRESHOLD;
       confidence = Math.min(100, 50 + safetyRatio * 50); // 50-100%
     }
 
