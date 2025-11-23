@@ -1,3 +1,4 @@
+import { Video } from "expo-av";
 import { useRouter } from "expo-router";
 import { useVideoPlayer } from "expo-video";
 import React, { useEffect, useRef, useState } from "react";
@@ -5,6 +6,7 @@ import {
   ActivityIndicator,
   Button,
   Image,
+  Modal,
   ScrollView,
   StyleSheet,
   Text,
@@ -40,6 +42,8 @@ import UserInfo from "../user_info";
 import { PoseResult } from "../../src/pipeline/pipelineTypes";
 
 export default function Tab() {
+  const [sampleVisible, setSampleVisible] = useState(false);
+  const sampleVideoAsset = require("../../assets/test_videos/Rebb_normal.mp4");
   const router = useRouter();
   const { videoUri, fileName, pickVideo, isCompressing, resetVideo } =
     useVideoPickerLogic();
@@ -685,6 +689,25 @@ export default function Tab() {
               />
             )}
 
+            {/* Sample video link - opens a modal to preview the reference video */}
+            <TouchableOpacity onPress={() => setSampleVisible(true)} style={styles.sampleLinkWrap}>
+              <Text style={styles.sampleLink}>See sample video: how to record input</Text>
+            </TouchableOpacity>
+
+            <Modal visible={sampleVisible} animationType="slide" onRequestClose={() => setSampleVisible(false)}>
+              <View style={styles.sampleModalContent}>
+                <Video
+                  source={sampleVideoAsset}
+                  useNativeControls
+                  resizeMode="contain"
+                  style={{ width: "100%", height: 360, backgroundColor: "#000" }}
+                />
+                <TouchableOpacity onPress={() => setSampleVisible(false)} style={{ marginTop: 12 }}>
+                  <Text style={styles.sampleCloseText}>Close</Text>
+                </TouchableOpacity>
+              </View>
+            </Modal>
+
             {/* Next Button */}
             <View style={styles.nextButtonContainer}>
               <TouchableOpacity
@@ -963,6 +986,10 @@ const styles = StyleSheet.create({
     padding: 20,
     borderRadius: 8,
   },
+  sampleLinkWrap: { width: "100%", maxWidth: 600, alignItems: "flex-start", marginTop: 12 },
+  sampleLink: { color: "#0b62d6", fontWeight: "600" },
+  sampleModalContent: { flex: 1, backgroundColor: "#000", padding: 16, justifyContent: "center", alignItems: "center" },
+  sampleCloseText: { color: "#fff", fontSize: 16, fontWeight: "600", marginTop: 8 },
   extractionContainer: {
     width: "100%",
     maxWidth: 600,
