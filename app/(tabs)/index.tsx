@@ -1,4 +1,3 @@
-import { Video } from "expo-av";
 import { useRouter } from "expo-router";
 import { useVideoPlayer } from "expo-video";
 import React, { useEffect, useRef, useState } from "react";
@@ -6,13 +5,12 @@ import {
   ActivityIndicator,
   Button,
   Image,
-  Modal,
   ScrollView,
   StyleSheet,
   Text,
   TouchableOpacity,
   useWindowDimensions,
-  View,
+  View
 } from "react-native";
 import { WebView } from "react-native-webview";
 // Use legacy API to avoid deprecation error in SDK 54
@@ -716,82 +714,45 @@ export default function Tab() {
               />
             )}
 
-            {/* Clear, easy-to-read recording instructions shown below the record section */}
-            <View style={styles.instructionsContainer}>
-              <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-                <Text style={styles.instructionsTitle}>{T[lang].quickTitle}</Text>
-                {/* subtle language toggle: small pill with short label */}
-                <TouchableOpacity onPress={() => setLang(l => (l === 'en' ? 'tl' : 'en'))} style={styles.langToggleSubtle}>
-                  <Text style={styles.langToggleSubtleText}>{T[lang].langToggle}</Text>
+            {/* Start Analysis (placed directly below the select video section) */}
+            {/* Group wrapper to align Start button and instructions to the same width */}
+            <View style={{ width: "100%", maxWidth: 680, alignItems: "center", marginTop: 12 }}>
+              <View style={styles.nextButtonContainer}>
+                <TouchableOpacity
+                  style={[
+                    styles.nextButton,
+                    (!videoUri || !webViewReady || !cnnModelReady || !bilstmModelReady) &&
+                      styles.nextButtonDisabled,
+                  ]}
+                  onPress={runCompletePipeline}
+                  disabled={!videoUri || !webViewReady || !cnnModelReady || !bilstmModelReady}
+                >
+                  <Text style={styles.nextButtonText}>
+                    {!webViewReady || !cnnModelReady || !bilstmModelReady ? "Loading models..." : "Start Analysis"}
+                  </Text>
                 </TouchableOpacity>
               </View>
-              <Text style={styles.instructionItem}>• {T[lang].item1}</Text>
-              <Text style={styles.instructionItem}>• {T[lang].item2}</Text>
-              <Text style={styles.instructionItem}>• {T[lang].item3}</Text>
-              <Text style={styles.instructionItem}>• {T[lang].item4}</Text>
-              <Text style={styles.instructionItem}>• {T[lang].item5}</Text>
-              {/* Tip: single clickable link to open sample video */}
-              <Text style={styles.instructionTip}>
-                <Text
-                  onPress={() => setSampleVisible(true)}
-                  style={styles.sampleLinkInline}
-                  accessibilityRole="link"
-                >
-                  Click here to see sample video.
-                </Text>
-              </Text>
-            </View>
- 
-             <Modal visible={sampleVisible} animationType="slide" onRequestClose={() => setSampleVisible(false)}>
-               <View style={styles.sampleModalContent}>
-                 <Video
-                   source={sampleVideoAsset}
-                   useNativeControls
-                   resizeMode="contain"
-                   style={{ width: "100%", height: 360, backgroundColor: "#000" }}
-                 />
-                 <TouchableOpacity onPress={() => setSampleVisible(false)} style={{ marginTop: 12 }}>
-                   <Text style={styles.sampleCloseText}>Close</Text>
-                 </TouchableOpacity>
-               </View>
-             </Modal>
 
-            {/* Next Button */}
-            <View style={styles.nextButtonContainer}>
-              <TouchableOpacity
-                style={[
-                  styles.nextButton,
-                  (!videoUri ||
-                    !webViewReady ||
-                    !cnnModelReady ||
-                    !bilstmModelReady) &&
-                    styles.nextButtonDisabled,
-                ]}
-                onPress={runCompletePipeline}
-                disabled={
-                  !videoUri ||
-                  !webViewReady ||
-                  !cnnModelReady ||
-                  !bilstmModelReady
-                }
-              >
-                <Text style={styles.nextButtonText}>
-                  {!webViewReady || !cnnModelReady || !bilstmModelReady
-                    ? "Loading models..."
-                    : "Start Analysis"}
+              {/* Clear, easy-to-read recording instructions shown AFTER the Start Analysis button.
+                  The instructions container now fills the same width as the button above. */}
+              <View style={[styles.instructionsContainer, { width: "100%", marginTop: 12 }]}>
+                <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
+                  <Text style={styles.instructionsTitle}>{T[lang].quickTitle}</Text>
+                  <TouchableOpacity onPress={() => setLang(l => (l === "en" ? "tl" : "en"))} style={styles.langToggleSubtle}>
+                    <Text style={styles.langToggleSubtleText}>{T[lang].langToggle}</Text>
+                  </TouchableOpacity>
+                </View>
+                <Text style={styles.instructionItem}>• {T[lang].item1}</Text>
+                <Text style={styles.instructionItem}>• {T[lang].item2}</Text>
+                <Text style={styles.instructionItem}>• {T[lang].item3}</Text>
+                <Text style={styles.instructionItem}>• {T[lang].item4}</Text>
+                <Text style={styles.instructionItem}>• {T[lang].item5}</Text>
+                <Text style={styles.instructionTip}>
+                  <Text onPress={() => setSampleVisible(true)} style={styles.sampleLinkInline} accessibilityRole="link">
+                    Click here to see sample video.
+                  </Text>
                 </Text>
-              </TouchableOpacity>
-              {(!webViewReady || !cnnModelReady || !bilstmModelReady) && (
-                <Text style={styles.loadingText}>
-                  {!webViewReady && "Initializing pose engine..."}
-                  {(!cnnModelReady || !bilstmModelReady) &&
-                    !webViewReady &&
-                    " & "}
-                  {!cnnModelReady && "Loading CNN model..."}
-                  {!bilstmModelReady && !cnnModelReady && " & "}
-                  {!bilstmModelReady && "Loading BiLSTM model..."}
-                </Text>
-              )}
+              </View>
             </View>
 
             {/* Results shown after pipeline completes */}
