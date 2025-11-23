@@ -1,3 +1,4 @@
+import { useRouter } from "expo-router";
 import { useVideoPlayer } from "expo-video";
 import React, { useEffect, useRef, useState } from "react";
 import {
@@ -23,24 +24,24 @@ import { useVideoPickerLogic } from "../../components/hooks/useVideoPickerLogic"
 import {
   detectGaitAnomaly,
   initializeBiLSTMModel,
-} from "../pipeline/bilstmPipeline";
-import { classifySEI, initializeCNNModel } from "../pipeline/cnnPipeline";
+} from "../../src/pipeline/bilstmPipeline";
 import {
-  exportAllResults,
-  exportJson,
-  exportSei,
-} from "../pipeline/exportPipeline";
-import { generateSei } from "../pipeline/seiPipeline";
+  classifySEI,
+  initializeCNNModel,
+} from "../../src/pipeline/cnnPipeline";
+import { exportJson, exportSei } from "../../src/pipeline/exportPipeline";
+import { generateSei } from "../../src/pipeline/seiPipeline";
 import {
   extractKeypoints,
   handleWebViewMessage,
-} from "../pipeline/videoPipeline";
+} from "../../src/pipeline/videoPipeline";
 import UserInfo from "../user_info";
 
-import { PoseResult } from "../pipeline/pipelineTypes";
+import { PoseResult } from "../../src/pipeline/pipelineTypes";
 
 export default function Tab() {
-  const { videoUri, fileName, pickVideo, isCompressing } =
+  const router = useRouter();
+  const { videoUri, fileName, pickVideo, isCompressing, resetVideo } =
     useVideoPickerLogic();
   const [running, setRunning] = useState(false);
   const [progress, setProgress] = useState<{
@@ -87,8 +88,7 @@ export default function Tab() {
     gender: string;
     age: string;
     notes: string;
-    profilePicture: string;
-  }>({ name: "", gender: "", age: "", notes: "", profilePicture: "" });
+  }>({ name: "", gender: "", age: "", notes: "" });
 
   // Download progress state
   const [downloadStatus, setDownloadStatus] = useState<{
@@ -166,9 +166,6 @@ export default function Tab() {
     const timestamp = new Date().toLocaleTimeString();
     const logMessage = `[${timestamp}] ${message}`;
 
-    // Log to console for debugging
-    console.log(logMessage);
-
     // Store in array for step detection in UI
     logsRef.current = [...logsRef.current, logMessage];
     setPipelineLogs([...logsRef.current]);
@@ -202,7 +199,6 @@ export default function Tab() {
             : message.level === "warn"
             ? "⚠️"
             : "📝";
-        console.log(`[WebView] ${prefix} ${message.message}`);
         return;
       }
 
@@ -218,24 +214,9 @@ export default function Tab() {
           totalBytes: message.totalBytes,
         });
 
-        // Log download progress
-        if (message.status === "started") {
-          console.log(
-            `📥 Downloading: ${message.fileName} (${message.loaded + 1}/${
-              message.total
-            })`
-          );
-        } else if (message.status === "complete") {
-          console.log(
-            `✅ Downloaded: ${message.fileName} (${message.loaded}/${message.total})`
-          );
-
-          // Clear download status after last file
-          if (message.loaded === message.total) {
-            setTimeout(() => setDownloadStatus(null), 2000);
-          }
-        } else if (message.percent) {
-          console.log(`📊 ${message.fileName}: ${message.percent.toFixed(1)}%`);
+        // Clear download status after last file
+        if (message.status === "complete" && message.loaded === message.total) {
+          setTimeout(() => setDownloadStatus(null), 2000);
         }
         return;
       }
@@ -444,8 +425,8 @@ export default function Tab() {
       gender: "",
       age: "",
       notes: "",
-      profilePicture: "",
     });
+    resetVideo();
   };
 
   // Show user info form to save report
@@ -474,7 +455,7 @@ export default function Tab() {
         imageUris = [seiSavedPath];
       }
 
-      // Create history item (matching history.tsx structure)
+      // Create history item with complete analysis data
       const historyItem = {
         id: Date.now(),
         name: userInfo.name.trim() || "Unknown",
@@ -489,6 +470,20 @@ export default function Tab() {
         notes: userInfo.notes.trim() || undefined,
         images: imageUris,
         createdAt: new Date().toISOString(),
+        // Add BiLSTM pattern analysis data
+        patternAnalysis: bilstmResult
+          ? {
+              isAbnormal: bilstmResult.isAbnormal,
+              confidence: bilstmResult.confidence,
+              meanError: bilstmResult.meanError,
+              maxError: bilstmResult.maxError,
+              threshold: bilstmResult.threshold,
+            }
+          : undefined,
+        // Add SEI base64 for PDF embedding
+        seiImageBase64: seiPng || undefined,
+        // Add CNN confidence separately for clarity
+        cnnConfidence: cnnResult?.confidence,
       };
 
       // Load existing history
@@ -546,15 +541,9 @@ export default function Tab() {
     try {
       setCnnLoading(true);
       setError(null);
-      console.log("[App] Running CNN classification...");
 
       const classificationResult = await classifySEI(seiSavedPath);
       setCnnResult(classificationResult);
-
-      console.log(
-        "[App] Classification complete:",
-        classificationResult.predictedClass
-      );
     } catch (err: any) {
       console.error("[App] CNN classification failed:", err);
       setError(`CNN classification failed: ${err.message}`);
@@ -604,9 +593,6 @@ export default function Tab() {
                 `Failed to load resource: ${nativeEvent.url} (${nativeEvent.statusCode})`
               );
             }}
-            onLoadEnd={() => {
-              console.log("[WebView] Load completed");
-            }}
           />
         </View>
       ) : null}
@@ -622,9 +608,11 @@ export default function Tab() {
           bilstmResult={bilstmResult}
           seiPng={seiPng}
           videoFileName={fileName || undefined}
-          onExportResults={() =>
-            exportAllResults(seiSavedPath, result, fileName)
-          }
+          onLearnMore={() => {
+            const gaitType =
+              cnnResult?.predictedClass.toLowerCase() || "normal";
+            router.push(`/glossary?gait=${gaitType}`);
+          }}
           onStartNew={startNewAnalysis}
           onSaveReport={handleSaveReport}
         />
@@ -632,29 +620,26 @@ export default function Tab() {
         <ScrollView style={styles.scrollContainer}>
           <View style={styles.container}>
             <View style={styles.userInfoFormContainer}>
-              <Text style={styles.formTitle}>Save Report to History</Text>
+              <Text style={styles.formTitle}>Save to History</Text>
               <Text style={styles.formSubtitle}>
-                Fill in patient information to save this analysis
+                Add optional details to help you remember this analysis later
               </Text>
 
               <UserInfo initialData={userInfo} onChange={setUserInfo} />
 
-              <View style={styles.formButtonsContainer}>
-                <TouchableOpacity
-                  style={[styles.formButton, styles.cancelButton]}
-                  onPress={handleCancelUserInfo}
-                >
-                  <Text style={styles.cancelButtonText}>Cancel</Text>
-                </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.saveButton}
+                onPress={handleSaveToHistory}
+              >
+                <Text style={styles.saveButtonText}>Save to History</Text>
+              </TouchableOpacity>
 
-                <TouchableOpacity
-                  style={[styles.formButton, styles.saveButton]}
-                  onPress={handleSaveToHistory}
-                  disabled={!userInfo.name.trim()}
-                >
-                  <Text style={styles.saveButtonText}>Save to History</Text>
-                </TouchableOpacity>
-              </View>
+              <TouchableOpacity
+                style={styles.cancelLink}
+                onPress={handleCancelUserInfo}
+              >
+                <Text style={styles.cancelLinkText}>Cancel</Text>
+              </TouchableOpacity>
             </View>
           </View>
         </ScrollView>
@@ -1095,36 +1080,44 @@ const styles = StyleSheet.create({
   formSubtitle: {
     fontSize: 16,
     color: "#666",
-    marginBottom: 24,
+    marginBottom: 12,
     textAlign: "center",
   },
-  formButtonsContainer: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    marginTop: 24,
-    gap: 12,
-  },
-  formButton: {
-    flex: 1,
-    paddingVertical: 14,
-    borderRadius: 8,
-    alignItems: "center",
-  },
-  cancelButton: {
-    backgroundColor: "#f0f0f0",
-  },
-  cancelButtonText: {
-    color: "#333",
-    fontSize: 16,
-    fontWeight: "600",
+  formHint: {
+    fontSize: 14,
+    color: "#999",
+    marginBottom: 24,
+    textAlign: "center",
+    fontStyle: "italic",
   },
   saveButton: {
     backgroundColor: "#007AFF",
+    paddingVertical: 16,
+    borderRadius: 10,
+    alignItems: "center",
+    marginTop: 28,
+    shadowColor: "#000",
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.15,
+    shadowRadius: 3,
+    elevation: 2,
   },
   saveButtonText: {
     color: "#fff",
-    fontSize: 16,
+    fontSize: 18,
     fontWeight: "600",
+  },
+  cancelLink: {
+    marginTop: 20,
+    paddingVertical: 8,
+    alignItems: "center",
+  },
+  cancelLinkText: {
+    color: "#007AFF",
+    fontSize: 15,
   },
   initialLoadingContainer: {
     flex: 1,

@@ -21,7 +21,7 @@
       ],
       "adaptiveIcon": {
         "backgroundColor": "#E6F4FE",
-        "foregroundImage": "./assets/images/gaitaware_logo.png",
+        "foregroundImage": "./assets/images/android-icon-foreground.png",
         "backgroundImage": "./assets/images/android-icon-background.png",
         "monochromeImage": "./assets/images/android-icon-monochrome.png"
       },
@@ -48,7 +48,10 @@
         }
       ],
       "expo-video",
-      "react-native-compressor"
+      "react-native-compressor",
+      "expo-audio",
+      "expo-web-browser",
+      "expo-asset"
     ],
     "experiments": {
       "typedRoutes": true,

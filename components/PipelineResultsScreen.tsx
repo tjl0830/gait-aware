@@ -24,7 +24,7 @@ interface PipelineResultsScreenProps {
   } | null;
   seiPng: string | null;
   videoFileName?: string;
-  onExportResults?: () => void;
+  onLearnMore?: () => void;
   onStartNew?: () => void;
   onSaveReport?: () => void;
 }
@@ -34,7 +34,7 @@ export function PipelineResultsScreen({
   bilstmResult,
   seiPng,
   videoFileName,
-  onExportResults,
+  onLearnMore,
   onStartNew,
   onSaveReport,
 }: PipelineResultsScreenProps) {
@@ -76,6 +76,11 @@ export function PipelineResultsScreen({
                 {bilstmResult.isAbnormal
                   ? "Irregular pattern detected"
                   : "Normal pattern"}
+              </Text>
+              <Text style={styles.resultExplanation}>
+                {bilstmResult.isAbnormal
+                  ? "Your walking pattern shows some variations. Consider consulting a healthcare professional for evaluation."
+                  : "Your walking pattern appears healthy and balanced."}
               </Text>
             </View>
 
@@ -133,17 +138,17 @@ export function PipelineResultsScreen({
           {onSaveReport && (
             <View style={styles.buttonWrapper}>
               <Button
-                title="Save Report"
+                title="Save to History"
                 onPress={onSaveReport}
                 color="#FF9500"
               />
             </View>
           )}
-          {onExportResults && (
+          {onLearnMore && cnnResult && (
             <View style={styles.buttonWrapper}>
               <Button
-                title="Export Details"
-                onPress={onExportResults}
+                title="Learn More"
+                onPress={onLearnMore}
                 color="#007AFF"
               />
             </View>
@@ -151,7 +156,7 @@ export function PipelineResultsScreen({
           {onStartNew && (
             <View style={styles.buttonWrapper}>
               <Button
-                title="Analyze New Video"
+                title="Start New Analysis"
                 onPress={onStartNew}
                 color="#34C759"
               />
@@ -237,6 +242,13 @@ const styles = StyleSheet.create({
   resultConfidence: {
     fontSize: 16,
     fontWeight: "500",
+  },
+  resultExplanation: {
+    fontSize: 14,
+    color: "#555",
+    textAlign: "center",
+    marginTop: 8,
+    lineHeight: 20,
   },
 
   seiContainer: {

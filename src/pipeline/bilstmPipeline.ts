@@ -68,7 +68,7 @@ export async function initializeBiLSTMModel(): Promise<void> {
     console.log("[BiLSTM] Threshold:", CONFIG.THRESHOLD);
 
     // Warm up model
-    console.log("[BiLSTM] Warming up model...");
+    console.log("\n[BiLSTM] Warming up model...");
     const dummyInput = tf.zeros([
       1,
       CONFIG.SEQUENCE_LENGTH,
@@ -90,8 +90,6 @@ export async function initializeBiLSTMModel(): Promise<void> {
  * Matches Python feature extraction order
  */
 export function extractBiLSTMFeatures(poseJsonData: any): number[][] {
-  console.log("[BiLSTM] Extracting features from pose data...");
-
   const frames = poseJsonData.frames;
   if (!frames || frames.length === 0) {
     throw new Error("No frames found in pose data");
@@ -129,10 +127,6 @@ export function extractBiLSTMFeatures(poseJsonData: any): number[][] {
 
     features.push(frameFeatures);
   }
-
-  console.log(
-    `[BiLSTM] Extracted ${features.length} frames with ${CONFIG.NUM_FEATURES} features`
-  );
 
   return features;
 }
@@ -214,8 +208,6 @@ function smoothSignal(signal: number[], windowSize: number = 5): number[] {
  * Matches Python preprocessing
  */
 function preprocessFeatures(features: number[][]): number[][] {
-  console.log("[BiLSTM] Preprocessing features...");
-
   // Transpose: frames × features → features × frames
   const numFrames = features.length;
   const numFeatures = CONFIG.NUM_FEATURES;
@@ -228,14 +220,6 @@ function preprocessFeatures(features: number[][]): number[][] {
     }
     transposed.push(featureColumn);
   }
-
-  // Debug: Check raw features before preprocessing
-  console.log(
-    `[BiLSTM] Raw features (first frame, first 3): [${features[0]
-      .slice(0, 3)
-      .map((v) => v.toFixed(4))
-      .join(", ")}]`
-  );
 
   // Interpolate and smooth each feature
   const processed: number[][] = transposed.map((featureColumn) => {
@@ -254,14 +238,6 @@ function preprocessFeatures(features: number[][]): number[][] {
     result.push(frame);
   }
 
-  // Debug: Check preprocessed features
-  console.log(
-    `[BiLSTM] Preprocessed features (first frame, first 3): [${result[0]
-      .slice(0, 3)
-      .map((v) => v.toFixed(4))
-      .join(", ")}]`
-  );
-
   return result;
 }
 
@@ -277,20 +253,6 @@ function normalizeFeatures(features: number[][]): number[][] {
   const mean = CONFIG.FEATURE_MEAN;
   const std = CONFIG.FEATURE_STD;
 
-  console.log("[BiLSTM] Normalizing with training statistics:");
-  console.log(
-    `  Mean: [${mean
-      .slice(0, 3)
-      .map((v: number) => v.toFixed(4))
-      .join(", ")}...]`
-  );
-  console.log(
-    `  Std: [${std
-      .slice(0, 3)
-      .map((v: number) => v.toFixed(4))
-      .join(", ")}...]`
-  );
-
   // Normalize using training statistics
   const normalized: number[][] = [];
   for (let t = 0; t < numFrames; t++) {
@@ -300,14 +262,6 @@ function normalizeFeatures(features: number[][]): number[][] {
     }
     normalized.push(frame);
   }
-
-  // Debug: Check normalized features
-  console.log(
-    `[BiLSTM] Normalized features (first frame, first 3): [${normalized[0]
-      .slice(0, 3)
-      .map((v) => v.toFixed(4))
-      .join(", ")}]`
-  );
 
   return normalized;
 }
@@ -326,12 +280,6 @@ function createSlidingWindows(features: number[][]): number[][][] {
     const window = features.slice(start, start + windowSize);
     windows.push(window);
   }
-
-  console.log(
-    `[BiLSTM] Created ${windows.length} windows (${windowSize} frames, ${
-      CONFIG.OVERLAP * 100
-    }% overlap)`
-  );
 
   return windows;
 }
@@ -390,54 +338,12 @@ export async function detectGaitAnomaly(poseJsonPath: string): Promise<{
     // Step 5: Convert to tensor
     const inputTensor = tf.tensor3d(windows); // Shape: [numWindows, 60, 16]
 
-    console.log(`[BiLSTM] Input tensor shape: ${inputTensor.shape}`);
-    console.log(`[BiLSTM] Input tensor dtype: ${inputTensor.dtype}`);
-
-    // Debug: Print first window, first frame, first 3 features
-    const debugData = await inputTensor.slice([0, 0, 0], [1, 1, 3]).data();
-    console.log(
-      `[BiLSTM] First window, first frame, first 3 features: [${Array.from(
-        debugData
-      )
-        .map((v) => v.toFixed(4))
-        .join(", ")}]`
-    );
-
     // Step 6: Run inference (reconstruction)
     const reconstructionTensor = model.predict(inputTensor) as tf.Tensor;
-
-    console.log(
-      `[BiLSTM] Reconstruction tensor shape: ${reconstructionTensor.shape}`
-    );
-    console.log(
-      `[BiLSTM] Reconstruction tensor dtype: ${reconstructionTensor.dtype}`
-    );
-
-    // Debug: Print reconstructed values for same position
-    const debugRecon = await reconstructionTensor
-      .slice([0, 0, 0], [1, 1, 3])
-      .data();
-    console.log(
-      `[BiLSTM] Reconstructed first 3 features: [${Array.from(debugRecon)
-        .map((v) => v.toFixed(4))
-        .join(", ")}]`
-    );
 
     // Step 7: Calculate reconstruction errors for each window
     const errorTensor = tf.square(tf.sub(inputTensor, reconstructionTensor));
     const windowErrors = await tf.mean(errorTensor, [1, 2]).data(); // Mean per window
-
-    // Debug: Print individual window errors
-    console.log(
-      `[BiLSTM] Individual window errors: [${Array.from(windowErrors)
-        .map((v) => v.toFixed(6))
-        .join(", ")}]`
-    );
-
-    // Cleanup tensors
-    inputTensor.dispose();
-    reconstructionTensor.dispose();
-    errorTensor.dispose();
 
     // Step 8: Calculate statistics
     const meanError =
@@ -463,11 +369,17 @@ export async function detectGaitAnomaly(poseJsonPath: string): Promise<{
     }
 
     const elapsed = Date.now() - startTime;
-    console.log(`[BiLSTM] ✅ Detection complete in ${elapsed}ms`);
-    console.log(`[BiLSTM] Mean error: ${meanError.toFixed(6)}`);
-    console.log(`[BiLSTM] Max error: ${maxError.toFixed(6)}`);
-    console.log(`[BiLSTM] Threshold: ${CONFIG.THRESHOLD.toFixed(6)}`);
-    console.log(`[BiLSTM] Result: ${isAbnormal ? "ABNORMAL" : "NORMAL"}`);
+
+    console.log(
+      `[BiLSTM] ✅ Detection complete in ${elapsed}ms - ${
+        isAbnormal ? "ABNORMAL" : "NORMAL"
+      } (${windows.length} windows, mean error: ${meanError.toFixed(4)})`
+    );
+
+    // Cleanup tensors
+    inputTensor.dispose();
+    reconstructionTensor.dispose();
+    errorTensor.dispose();
 
     return {
       isAbnormal,

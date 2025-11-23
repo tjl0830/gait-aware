@@ -187,5 +187,10 @@ export function useVideoPickerLogic() {
     }
   }
 
-  return { videoUri, fileName, pickVideo, isCompressing };
+  const resetVideo = () => {
+    setVideoUri(null);
+    setFileName("");
+  };
+
+  return { videoUri, fileName, pickVideo, isCompressing, resetVideo };
 }
