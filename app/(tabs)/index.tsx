@@ -42,6 +42,33 @@ import UserInfo from "../user_info";
 import { PoseResult } from "../../src/pipeline/pipelineTypes";
 
 export default function Tab() {
+  // language toggle: 'en' = English, 'tl' = Tagalog
+  const [lang, setLang] = useState<'en' | 'tl'>('en');
+  const T = {
+    en: {
+      quickTitle: 'Recording Tips',
+      item1: 'Place device on a stable surface or have someone hold it steady at waist height.',
+      item2: 'Turn the device sideways (landscape).',
+      item3: 'Stand to the side so the whole body (head to feet) is visible.',
+      item4: 'Walk straight from left → right across the frame.',
+      item5: 'Record at least 3 full steps but do not exceed 10 seconds.',
+      tip: 'Tip: Watch the sample video for an example.',
+      sampleLink: 'See sample video',
+      langToggle: 'TL',
+    },
+    tl: {
+      quickTitle: 'Tips sa Pagre-record',
+      item1: 'Ilagay ang device sa matibay na patungan o hayaan may humawak nito sa taas ng balakang.',
+      item2: 'I-turn ang device nang pahalang (landscape).',
+      item3: 'Tumayo sa gilid para makita ang buong katawan (ulo hanggang paa).',
+      item4: 'Maglakad nang diretso mula kaliwa → kanan sa frame.',
+      item5: 'Mag-record ng hindi bababa sa 3 buong hakbang ngunit huwag lalampas sa 10 segundo.',
+      tip: 'Tip: Panoorin ang sample video para halimbawa.',
+      sampleLink: 'Tingnan ang sample video',
+      langToggle: 'EN',
+    },
+  };
+
   const [sampleVisible, setSampleVisible] = useState(false);
   const sampleVideoAsset = require("../../assets/test_videos/Rebb_normal.mp4");
   const router = useRouter();
@@ -689,24 +716,45 @@ export default function Tab() {
               />
             )}
 
-            {/* Sample video link - opens a modal to preview the reference video */}
-            <TouchableOpacity onPress={() => setSampleVisible(true)} style={styles.sampleLinkWrap}>
-              <Text style={styles.sampleLink}>See sample video: how to record input</Text>
-            </TouchableOpacity>
-
-            <Modal visible={sampleVisible} animationType="slide" onRequestClose={() => setSampleVisible(false)}>
-              <View style={styles.sampleModalContent}>
-                <Video
-                  source={sampleVideoAsset}
-                  useNativeControls
-                  resizeMode="contain"
-                  style={{ width: "100%", height: 360, backgroundColor: "#000" }}
-                />
-                <TouchableOpacity onPress={() => setSampleVisible(false)} style={{ marginTop: 12 }}>
-                  <Text style={styles.sampleCloseText}>Close</Text>
+            {/* Clear, easy-to-read recording instructions shown below the record section */}
+            <View style={styles.instructionsContainer}>
+              <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+                <Text style={styles.instructionsTitle}>{T[lang].quickTitle}</Text>
+                {/* subtle language toggle: small pill with short label */}
+                <TouchableOpacity onPress={() => setLang(l => (l === 'en' ? 'tl' : 'en'))} style={styles.langToggleSubtle}>
+                  <Text style={styles.langToggleSubtleText}>{T[lang].langToggle}</Text>
                 </TouchableOpacity>
               </View>
-            </Modal>
+              <Text style={styles.instructionItem}>• {T[lang].item1}</Text>
+              <Text style={styles.instructionItem}>• {T[lang].item2}</Text>
+              <Text style={styles.instructionItem}>• {T[lang].item3}</Text>
+              <Text style={styles.instructionItem}>• {T[lang].item4}</Text>
+              <Text style={styles.instructionItem}>• {T[lang].item5}</Text>
+              {/* Tip: single clickable link to open sample video */}
+              <Text style={styles.instructionTip}>
+                <Text
+                  onPress={() => setSampleVisible(true)}
+                  style={styles.sampleLinkInline}
+                  accessibilityRole="link"
+                >
+                  Click here to see sample video.
+                </Text>
+              </Text>
+            </View>
+ 
+             <Modal visible={sampleVisible} animationType="slide" onRequestClose={() => setSampleVisible(false)}>
+               <View style={styles.sampleModalContent}>
+                 <Video
+                   source={sampleVideoAsset}
+                   useNativeControls
+                   resizeMode="contain"
+                   style={{ width: "100%", height: 360, backgroundColor: "#000" }}
+                 />
+                 <TouchableOpacity onPress={() => setSampleVisible(false)} style={{ marginTop: 12 }}>
+                   <Text style={styles.sampleCloseText}>Close</Text>
+                 </TouchableOpacity>
+               </View>
+             </Modal>
 
             {/* Next Button */}
             <View style={styles.nextButtonContainer}>
@@ -1197,4 +1245,53 @@ const styles = StyleSheet.create({
     textAlign: "center",
     marginTop: 10,
   },
+  instructionsContainer: {
+    marginTop: 12,
+    marginHorizontal: 12,
+    padding: 14,
+    backgroundColor: "#fff9f0",
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: "#f1d8b0",
+    maxWidth: 680,
+  },
+  instructionsTitle: {
+    fontSize: 20,
+    fontWeight: "700",
+    color: "#111",
+    marginBottom: 8,
+  },
+  instructionItem: {
+    fontSize: 18,
+    lineHeight: 26,
+    color: "#111",
+    marginBottom: 8,
+  },
+  instructionTip: {
+    marginTop: 8,
+    fontSize: 17,
+    color: "#0b62d6",
+    fontWeight: "700",
+  },
+  /* smaller language toggle */
+  langToggleSubtle: {
+    paddingVertical: 4,
+    paddingHorizontal: 8,
+    backgroundColor: '#0b62d6',
+    borderRadius: 12,
+    // reduced shadow for subtle prominence
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.08,
+    shadowRadius: 2,
+    elevation: 1,
+    borderWidth: 0,
+  },
+  langToggleSubtleText: {
+    color: '#fff',
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  sampleLinkInline: { color: "#0b62d6", fontWeight: "800", textDecorationLine: "underline", fontSize: 17 },
+  largeTouchable: { minHeight: 48, minWidth: 48, justifyContent: "center", alignItems: "center" },
 });
