@@ -139,6 +139,7 @@ export default function Tab() {
   const [showUserInfoForm, setShowUserInfoForm] = useState(false);
   const [pipelineLogs, setPipelineLogs] = useState<string[]>([]);
   const logsRef = useRef<string[]>([]);
+  const [videoTotalFrames, setVideoTotalFrames] = useState<number | undefined>(undefined);
 
   // User info state
   const [userInfo, setUserInfo] = useState<{
@@ -285,6 +286,10 @@ export default function Tab() {
       ) {
         setWebViewReady(true);
       }
+      if (message.type === "metadata") {
+        // Receive video metadata before processing starts
+        setVideoTotalFrames(message.totalFrames);
+      }
       if (
         message.type === "progress" &&
         pipelineCallbacksRef.current.onProgress
@@ -309,6 +314,7 @@ export default function Tab() {
           height: message.results.metadata.height,
           fps: message.results.metadata.fps,
         };
+        setVideoTotalFrames(message.results.metadata.frame_count);
         setResult(result);
 
         // Notify pipeline callback
@@ -486,6 +492,7 @@ export default function Tab() {
     setError(null);
     logsRef.current = [];
     setPipelineLogs([]);
+    setVideoTotalFrames(undefined);
     setUserInfo({
       name: "",
       gender: "",
@@ -669,6 +676,8 @@ export default function Tab() {
       {isPipelineRunning ? (
         <PipelineLoadingScreen
           logs={pipelineLogs}
+          currentFrame={progress?.frameIndex}
+          totalFrames={videoTotalFrames}
           downloadStatus={downloadStatus}
         />
       ) : showResults ? (

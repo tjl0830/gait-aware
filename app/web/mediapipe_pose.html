@@ -282,6 +282,16 @@
 
                         console.log(`📊 [MediaPipe] Video info: ${results.metadata.width}x${results.metadata.height}, ${duration.toFixed(2)}s, ${totalFrames} frames at ${targetFps} fps`);
 
+                        // Send metadata with total frames to React Native before processing starts
+                        window.ReactNativeWebView?.postMessage?.(JSON.stringify({ 
+                            type: 'metadata', 
+                            totalFrames: totalFrames,
+                            width: results.metadata.width,
+                            height: results.metadata.height,
+                            duration: duration,
+                            fps: targetFps
+                        }));
+
                         // Deterministic, seek-driven processing (no reliance on videoElement.ended)
                         processing = true;
                         videoElement.pause();

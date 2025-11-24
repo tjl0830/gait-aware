@@ -9,6 +9,8 @@ import {
 
 interface PipelineLoadingScreenProps {
   logs: string[];
+  currentFrame?: number;
+  totalFrames?: number;
   downloadStatus?: {
     fileName: string;
     status: "started" | "downloading" | "complete";
@@ -22,6 +24,8 @@ interface PipelineLoadingScreenProps {
 
 export function PipelineLoadingScreen({
   logs,
+  currentFrame,
+  totalFrames,
   downloadStatus,
 }: PipelineLoadingScreenProps) {
   const scrollViewRef = useRef<ScrollView>(null);
@@ -56,8 +60,17 @@ export function PipelineLoadingScreen({
   };
 
   const currentStep = getCurrentStep();
+  
+  // Build step labels with dynamic frame progress for step 1
+  const getStepLabel = (stepId: number, baseLabel: string) => {
+    if (stepId === 1 && currentStep === 1 && currentFrame && totalFrames) {
+      return `${baseLabel} - frame ${currentFrame} of ${totalFrames}`;
+    }
+    return baseLabel;
+  };
+
   const steps = [
-    { id: 1, label: "Analyzing motion" },
+    { id: 1, label: getStepLabel(1, "Analyzing motion") },
     { id: 2, label: "Detecting patterns" },
     { id: 3, label: "Generating visualization" },
     { id: 4, label: "Classifying gait" },
