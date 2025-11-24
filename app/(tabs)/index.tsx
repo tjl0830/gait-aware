@@ -22,18 +22,18 @@ import { VideoPicker } from "../../components/VideoPicker";
 import { VideoPreview } from "../../components/VideoPreview";
 import { useVideoPickerLogic } from "../../components/hooks/useVideoPickerLogic";
 import {
-  detectGaitAnomaly,
-  initializeBiLSTMModel,
+    detectGaitAnomaly,
+    initializeBiLSTMModel,
 } from "../../src/pipeline/bilstmPipeline";
 import {
-  classifySEI,
-  initializeCNNModel,
+    classifySEI,
+    initializeCNNModel,
 } from "../../src/pipeline/cnnPipeline";
 import { exportJson, exportSei } from "../../src/pipeline/exportPipeline";
 import { generateSei } from "../../src/pipeline/seiPipeline";
 import {
-  extractKeypoints,
-  handleWebViewMessage,
+    extractKeypoints,
+    handleWebViewMessage,
 } from "../../src/pipeline/videoPipeline";
 import UserInfo from "../user_info";
 
@@ -96,8 +96,19 @@ export default function Tab() {
     meanError: number;
     maxError: number;
     numWindows: number;
-    threshold: number;
+    globalThreshold: number;
     confidence: number;
+    jointErrors: Array<{
+      joint: string;
+      error: number;
+      isAbnormal: boolean;
+      threshold: number;
+      xError: number;
+      yError: number;
+    }>;
+    worstJoint: string;
+    worstJointError: number;
+    abnormalJointCount: number;
   } | null>(null);
   const webViewRef = useRef<WebView>(null);
   const [webViewReady, setWebViewReady] = useState(false);
@@ -363,6 +374,14 @@ export default function Tab() {
       addLog(`  Result: ${anomalyResult.isAbnormal ? "ABNORMAL" : "NORMAL"}`);
       addLog(`  Confidence: ${anomalyResult.confidence.toFixed(2)}%`);
       addLog(`  Max Error: ${anomalyResult.maxError.toFixed(6)}`);
+      
+      // Log worst joint if any are abnormal
+      const abnormalJoints = anomalyResult.jointErrors.filter(j => j.isAbnormal);
+      if (abnormalJoints.length > 0) {
+        addLog(`  ⚠️ ${abnormalJoints.length} joint(s) showing irregular patterns`);
+        addLog(`  Worst Joint: ${anomalyResult.worstJoint} (${anomalyResult.worstJointError.toFixed(6)})`);
+      }
+      
       await new Promise((resolve) => setTimeout(resolve, 1000));
 
       // Step 3: Generate SEI
@@ -506,7 +525,10 @@ export default function Tab() {
               confidence: bilstmResult.confidence,
               meanError: bilstmResult.meanError,
               maxError: bilstmResult.maxError,
-              threshold: bilstmResult.threshold,
+              globalThreshold: bilstmResult.globalThreshold,
+              abnormalJointCount: bilstmResult.abnormalJointCount,
+              worstJoint: bilstmResult.worstJoint,
+              jointErrors: bilstmResult.jointErrors,
             }
           : undefined,
         // Add SEI base64 for PDF embedding

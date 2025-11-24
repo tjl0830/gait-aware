@@ -32,14 +32,14 @@ const CONFIG = {
   GLOBAL_THRESHOLD: 0.1768068329674364, // Global threshold (legacy, for backward compatibility)
   // Per-joint thresholds (to be updated with empirically computed values)
   JOINT_THRESHOLDS: {
-    LEFT_HIP: 0.5543604445155327,
-    RIGHT_HIP: 0.6172293541221003,
-    LEFT_KNEE: 0.5403470171983461,
-    RIGHT_KNEE: 0.5625000450807769,
-    LEFT_ANKLE: 0.5979195635077637,
-    RIGHT_ANKLE: 0.6394362561662352,
-    LEFT_FOOT_INDEX: 0.5445324308178958,
-    RIGHT_FOOT_INDEX: 0.6486219410648343,
+    LEFT_HIP: 0.1768068329674364,
+    RIGHT_HIP: 0.1768068329674364,
+    LEFT_KNEE: 0.1768068329674364,
+    RIGHT_KNEE: 0.1768068329674364,
+    LEFT_ANKLE: 0.1768068329674364,
+    RIGHT_ANKLE: 0.1768068329674364,
+    LEFT_FOOT_INDEX: 0.1768068329674364,
+    RIGHT_FOOT_INDEX: 0.1768068329674364,
   },
 };
 
@@ -155,7 +155,7 @@ function interpolateNaN(arr: number[]): number[] {
 
   // If all NaN, return as-is (matches Python behavior)
   if (validIndices.length === 0) {
-    return result;
+    return result; // Keep NaN values
   }
 
   // Linear interpolation for NaN values
@@ -248,20 +248,19 @@ function preprocessFeatures(features: number[][]): number[][] {
 }
 
 /**
- * Normalize features using PER-VIDEO z-score normalization
- * CRITICAL: Must match Python training - each video normalized independently!
- * 
- * Python equivalent:
- *   mean = np.mean(features, axis=0)
- *   std = np.std(features, axis=0)
- *   normalized = (features - mean) / std
+ * Normalize features using PER-VIDEO statistics
+ * CRITICAL: Must match Python training approach - each video normalized independently!
+ * This makes the model learn relative motion patterns, not absolute positions.
  */
 function normalizeFeatures(features: number[][]): number[][] {
   const numFrames = features.length;
   const numFeatures = CONFIG.NUM_FEATURES;
 
-  // Calculate mean for each feature across all frames
+  // Compute per-video mean and std (matching Python training)
   const mean: number[] = new Array(numFeatures).fill(0);
+  const std: number[] = new Array(numFeatures).fill(0);
+
+  // Calculate mean for each feature
   for (let t = 0; t < numFrames; t++) {
     for (let f = 0; f < numFeatures; f++) {
       mean[f] += features[t][f];
@@ -272,7 +271,6 @@ function normalizeFeatures(features: number[][]): number[][] {
   }
 
   // Calculate standard deviation for each feature
-  const std: number[] = new Array(numFeatures).fill(0);
   for (let t = 0; t < numFrames; t++) {
     for (let f = 0; f < numFeatures; f++) {
       const diff = features[t][f] - mean[f];
@@ -287,7 +285,7 @@ function normalizeFeatures(features: number[][]): number[][] {
     }
   }
 
-  // Z-score normalization: (value - mean) / std
+  // Normalize using per-video statistics (centers each video at origin)
   const normalized: number[][] = [];
   for (let t = 0; t < numFrames; t++) {
     const frame: number[] = [];
@@ -369,7 +367,7 @@ export async function detectGaitAnomaly(poseJsonPath: string): Promise<{
     // Step 2: Preprocess (interpolate + smooth)
     features = preprocessFeatures(features);
 
-    // Step 3: Normalize features using PER-VIDEO z-score normalization
+    // Step 3: Normalize features using TRAINING statistics
     const normalized = normalizeFeatures(features);
 
     // Step 4: Create sliding windows
@@ -429,36 +427,30 @@ export async function detectGaitAnomaly(poseJsonPath: string): Promise<{
     // Sort by error (descending) to identify worst joints
     jointErrorsArray.sort((a, b) => b.error - a.error);
     
-    // Filter out hip joints for pattern analysis (only use lower limb joints)
-    const lowerLimbJoints = jointErrorsArray.filter(
-      j => j.joint !== 'LEFT_HIP' && j.joint !== 'RIGHT_HIP'
-    );
-    
-    // Count abnormal joints (excluding hips)
-    const abnormalJointCount = lowerLimbJoints.filter(j => j.isAbnormal).length;
+    // Count abnormal joints
+    const abnormalJointCount = jointErrorsArray.filter(j => j.isAbnormal).length;
 
     // Step 8: Calculate statistics
     const meanError =
       Array.from(windowErrors).reduce((a, b) => a + b, 0) / windowErrors.length;
     const maxError = Math.max(...Array.from(windowErrors));
 
-    // Step 9: Classify based on per-joint thresholds (excluding hips)
-    // Overall gait is abnormal if ANY lower limb joint exceeds its specific threshold
+    // Step 9: Classify based on per-joint thresholds
+    // Overall gait is abnormal if ANY joint exceeds its specific threshold
     const isAbnormal = abnormalJointCount > 0;
 
-    // Calculate confidence based on worst lower limb joint's distance from its threshold
+    // Calculate confidence based on worst joint's distance from its threshold
     // This provides more clinically relevant confidence than global mean
     let confidence: number;
-    const worstLowerLimbJoint = lowerLimbJoints[0];
     if (isAbnormal) {
       // Abnormal: confidence based on how much worst joint exceeded its threshold
-      const worstJointThreshold = worstLowerLimbJoint.threshold;
-      const excessRatio = (worstLowerLimbJoint.error - worstJointThreshold) / worstJointThreshold;
+      const worstJointThreshold = jointErrorsArray[0].threshold;
+      const excessRatio = (jointErrorsArray[0].error - worstJointThreshold) / worstJointThreshold;
       confidence = Math.min(100, 50 + excessRatio * 50); // 50-100%
     } else {
       // Normal: confidence based on how far worst joint is below its threshold
-      const worstJointThreshold = worstLowerLimbJoint.threshold;
-      const safetyRatio = (worstJointThreshold - worstLowerLimbJoint.error) / worstJointThreshold;
+      const worstJointThreshold = jointErrorsArray[0].threshold;
+      const safetyRatio = (worstJointThreshold - jointErrorsArray[0].error) / worstJointThreshold;
       confidence = Math.min(100, 50 + safetyRatio * 50); // 50-100%
     }
 
@@ -467,19 +459,19 @@ export async function detectGaitAnomaly(poseJsonPath: string): Promise<{
     console.log(
       `[BiLSTM] ✅ Detection complete in ${elapsed}ms - ${
         isAbnormal ? "ABNORMAL" : "NORMAL"
-      } (${windows.length} windows, ${abnormalJointCount}/${lowerLimbJoints.length} abnormal lower limb joints)`
+      } (${windows.length} windows, ${abnormalJointCount}/${jointErrorsArray.length} abnormal joints)`
     );
 
-    // Log per-joint errors with individual thresholds (lower limb joints only)
-    console.log('[BiLSTM] 📊 Lower Limb Joint Error Analysis:');
-    lowerLimbJoints.forEach((joint, index) => {
+    // Log per-joint errors with individual thresholds
+    console.log('[BiLSTM] 📊 Per-Joint Error Analysis:');
+    jointErrorsArray.forEach((joint, index) => {
       const status = joint.isAbnormal ? '⚠️ ABNORMAL' : '✅ Normal';
       const ratio = ((joint.error / joint.threshold) * 100).toFixed(1);
       console.log(
         `[BiLSTM]   ${index + 1}. ${joint.joint.padEnd(18)} - Error: ${joint.error.toFixed(6)} (${ratio}% of threshold: ${joint.threshold.toFixed(6)}) ${status}`
       );
     });
-    console.log(`[BiLSTM] 🎯 Worst Lower Limb Joint: ${worstLowerLimbJoint.joint} (${worstLowerLimbJoint.error.toFixed(6)}, threshold: ${worstLowerLimbJoint.threshold.toFixed(6)})`);
+    console.log(`[BiLSTM] 🎯 Worst Joint: ${jointErrorsArray[0].joint} (${jointErrorsArray[0].error.toFixed(6)}, threshold: ${jointErrorsArray[0].threshold.toFixed(6)})`);
 
     // Cleanup tensors
     inputTensor.dispose();
@@ -494,8 +486,8 @@ export async function detectGaitAnomaly(poseJsonPath: string): Promise<{
       globalThreshold: CONFIG.GLOBAL_THRESHOLD,
       confidence,
       jointErrors: jointErrorsArray,
-      worstJoint: worstLowerLimbJoint.joint,
-      worstJointError: worstLowerLimbJoint.error,
+      worstJoint: jointErrorsArray[0].joint,
+      worstJointError: jointErrorsArray[0].error,
       abnormalJointCount,
     };
   } catch (error: any) {

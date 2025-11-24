@@ -19,8 +19,19 @@ interface PipelineResultsScreenProps {
     meanError: number;
     maxError: number;
     numWindows: number;
-    threshold: number;
+    globalThreshold: number;
     confidence: number;
+    jointErrors: Array<{
+      joint: string;
+      error: number;
+      isAbnormal: boolean;
+      threshold: number;
+      xError: number;
+      yError: number;
+    }>;
+    worstJoint: string;
+    worstJointError: number;
+    abnormalJointCount: number;
   } | null;
   seiPng: string | null;
   videoFileName?: string;
@@ -83,6 +94,46 @@ export function PipelineResultsScreen({
                   : "Your walking pattern appears healthy and balanced."}
               </Text>
             </View>
+
+            {/* Joint Analysis - Show all joints except hips */}
+            {bilstmResult.jointErrors && bilstmResult.jointErrors.length > 0 && (() => {
+              // Filter out left and right hip joints
+              const filteredJoints = bilstmResult.jointErrors.filter(
+                joint => joint.joint !== 'LEFT_HIP' && joint.joint !== 'RIGHT_HIP'
+              );
+              const filteredAbnormalCount = filteredJoints.filter(j => j.isAbnormal).length;
+              
+              return filteredJoints.length > 0 && (
+                <View style={styles.jointAnalysisContainer}>
+                  <Text style={styles.resultLabel}>Joint Analysis</Text>
+                  <Text style={styles.jointDescription}>
+                    {filteredAbnormalCount > 0 
+                      ? `${filteredAbnormalCount} joint(s) showing irregular patterns:`
+                      : 'All joints showing normal patterns:'}
+                  </Text>
+                  {filteredJoints.map((joint, index) => (
+                    <View key={index} style={styles.jointRow}>
+                      <Text style={styles.jointName}>{joint.joint.replace(/_/g, ' ')}</Text>
+                      <View style={styles.jointErrorBar}>
+                        <View 
+                          style={[
+                            styles.jointErrorFill,
+                            { 
+                              width: `${Math.min(100, (joint.error / joint.threshold) * 50)}%`,
+                              backgroundColor: joint.isAbnormal ? '#ef6c00' : '#4caf50'
+                            }
+                          ]} 
+                        />
+                      </View>
+                      <Text style={[styles.jointErrorValue, { color: joint.isAbnormal ? '#ef6c00' : '#4caf50' }]}>
+                        {joint.error.toFixed(4)}{'\n'}
+                        <Text style={styles.thresholdText}>({((joint.error / joint.threshold) * 100).toFixed(0)}%)</Text>
+                      </Text>
+                    </View>
+                  ))}
+                </View>
+              );
+            })()}
 
             {/* Gait Type - Secondary Detail */}
             <View
@@ -275,5 +326,49 @@ const styles = StyleSheet.create({
   },
   buttonWrapper: {
     marginVertical: 8,
+  },
+  jointAnalysisContainer: {
+    backgroundColor: '#f5f5f5',
+    borderRadius: 8,
+    padding: 16,
+    marginBottom: 16,
+  },
+  jointDescription: {
+    fontSize: 14,
+    color: '#666',
+    marginBottom: 12,
+  },
+  jointRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 10,
+  },
+  jointName: {
+    fontSize: 13,
+    fontWeight: '500',
+    color: '#333',
+    width: 120,
+  },
+  jointErrorBar: {
+    flex: 1,
+    height: 20,
+    backgroundColor: '#f0f0f0',
+    borderRadius: 10,
+    overflow: 'hidden',
+    marginHorizontal: 8,
+  },
+  jointErrorFill: {
+    height: '100%',
+    borderRadius: 10,
+  },
+  jointErrorValue: {
+    fontSize: 12,
+    color: '#666',
+    width: 70,
+    textAlign: 'right',
+  },
+  thresholdText: {
+    fontSize: 10,
+    color: '#999',
   },
 });
