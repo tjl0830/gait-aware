@@ -1,3 +1,4 @@
+import { Video } from "expo-av";
 import { useRouter } from "expo-router";
 import { useVideoPlayer } from "expo-video";
 import React, { useEffect, useRef, useState } from "react";
@@ -159,15 +160,6 @@ export default function Tab() {
   } | null>(null);
 
   const player = useVideoPlayer(videoUri, (player) => {
-    if (player) {
-      player.loop = true;
-      player.audioTrack = null;
-      player.play();
-    }
-  });
-
-  // Player for the sample modal video (keeps controls consistent with VideoPreview)
-  const samplePlayer = useVideoPlayer(sampleVideoUri, (player) => {
     if (player) {
       player.loop = true;
       player.audioTrack = null;
@@ -1005,25 +997,19 @@ export default function Tab() {
       )}
 
       {/* Sample Video Modal (plays bundled assets/test_videos/Rebb_normal.mp4) */}
-      <Modal
-        visible={sampleVisible}
-        animationType="slide"
-        onRequestClose={() => setSampleVisible(false)}
-      >
+      <Modal visible={sampleVisible} animationType="slide" onRequestClose={() => setSampleVisible(false)}>
         <View style={styles.sampleModalContent}>
           {sampleVideoUri ? (
-            // Reuse VideoPreview so the controls and behavior match the main preview
-            <View style={{ width: "100%", maxWidth: 900, paddingHorizontal: 12 }}>
-              {/* VideoPreview expects a player created by useVideoPlayer */}
-              <VideoPreview uri={sampleVideoUri} fileName={"sample"} player={samplePlayer} />
-            </View>
+            <Video
+              source={{ uri: sampleVideoUri }}
+              useNativeControls
+              resizeMode="contain"
+              style={{ width: "100%", height: 360, backgroundColor: "#000" }}
+            />
           ) : (
             <Text style={{ color: "#fff" }}>Sample video not available</Text>
           )}
-          <TouchableOpacity
-            onPress={() => setSampleVisible(false)}
-            style={{ marginTop: 12 }}
-          >
+          <TouchableOpacity onPress={() => setSampleVisible(false)} style={{ marginTop: 12 }}>
             <Text style={styles.sampleCloseText}>Close</Text>
           </TouchableOpacity>
         </View>
