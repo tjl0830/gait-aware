@@ -1,3 +1,4 @@
+import { Video } from "expo-av";
 import { useRouter } from "expo-router";
 import { useVideoPlayer } from "expo-video";
 import React, { useEffect, useRef, useState } from "react";
@@ -5,6 +6,7 @@ import {
   ActivityIndicator,
   Button,
   Image,
+  Modal,
   ScrollView,
   StyleSheet,
   Text,
@@ -22,18 +24,18 @@ import { VideoPicker } from "../../components/VideoPicker";
 import { VideoPreview } from "../../components/VideoPreview";
 import { useVideoPickerLogic } from "../../components/hooks/useVideoPickerLogic";
 import {
-    detectGaitAnomaly,
-    initializeBiLSTMModel,
+  detectGaitAnomaly,
+  initializeBiLSTMModel,
 } from "../../src/pipeline/bilstmPipeline";
 import {
-    classifySEI,
-    initializeCNNModel,
+  classifySEI,
+  initializeCNNModel,
 } from "../../src/pipeline/cnnPipeline";
 import { exportJson, exportSei } from "../../src/pipeline/exportPipeline";
 import { generateSei } from "../../src/pipeline/seiPipeline";
 import {
-    extractKeypoints,
-    handleWebViewMessage,
+  extractKeypoints,
+  handleWebViewMessage,
 } from "../../src/pipeline/videoPipeline";
 import UserInfo from "../user_info";
 
@@ -68,7 +70,23 @@ export default function Tab() {
   };
 
   const [sampleVisible, setSampleVisible] = useState(false);
-  const sampleVideoAsset = require("../../assets/test_videos/Rebb_normal.mp4");
+  const [sampleVideoUri, setSampleVideoUri] = useState<string | null>(null);
+
+  // load bundled sample video and expose a file:// URI usable by <Video />
+  useEffect(() => {
+    (async () => {
+      try {
+        const moduleId = require("../../assets/test_videos/Rebb_normal.mp4");
+        const asset = Asset.fromModule(moduleId);
+        await asset.downloadAsync();
+        setSampleVideoUri(asset.localUri ?? asset.uri);
+      } catch (e) {
+        console.warn("Failed to load sample video asset:", e);
+        setSampleVideoUri(null);
+      }
+    })();
+  }, []);
+
   const router = useRouter();
   const { videoUri, fileName, pickVideo, isCompressing, resetVideo } =
     useVideoPickerLogic();
@@ -977,6 +995,25 @@ export default function Tab() {
           </View>
         </ScrollView>
       )}
+
+      {/* Sample Video Modal (plays bundled assets/test_videos/Rebb_normal.mp4) */}
+      <Modal visible={sampleVisible} animationType="slide" onRequestClose={() => setSampleVisible(false)}>
+        <View style={styles.sampleModalContent}>
+          {sampleVideoUri ? (
+            <Video
+              source={{ uri: sampleVideoUri }}
+              useNativeControls
+              resizeMode="contain"
+              style={{ width: "100%", height: 360, backgroundColor: "#000" }}
+            />
+          ) : (
+            <Text style={{ color: "#fff" }}>Sample video not available</Text>
+          )}
+          <TouchableOpacity onPress={() => setSampleVisible(false)} style={{ marginTop: 12 }}>
+            <Text style={styles.sampleCloseText}>Close</Text>
+          </TouchableOpacity>
+        </View>
+      </Modal>
     </>
   );
 }
