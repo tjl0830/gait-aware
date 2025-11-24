@@ -1,4 +1,3 @@
-import { Picker } from "@react-native-picker/picker";
 import React, { useEffect, useState } from "react";
 import { StyleSheet, Text, TextInput, View } from "react-native";
 
@@ -52,20 +51,17 @@ function UserInfo({ initialData, onChange }: UserInfoProps = {}) {
       <View style={[styles.formGroup, styles.row]}>
         <View style={[styles.column, { flex: 1, marginRight: 10 }]}>
           <Text style={styles.label}>Gender</Text>
-          <Picker
-            selectedValue={formData.gender}
-            onValueChange={(value) => {
+          <TextInput
+            style={styles.input}
+            value={formData.gender}
+            onChangeText={(value) => {
               const newData = { ...formData, gender: value };
               setFormData(newData);
               onChange?.(newData);
             }}
-            style={styles.picker}
-          >
-            <Picker.Item label="Select" value="" />
-            <Picker.Item label="Male" value="Male" />
-            <Picker.Item label="Female" value="Female" />
-            <Picker.Item label="Other" value="Other" />
-          </Picker>
+            placeholder="e.g., Male / Female / Other"
+            placeholderTextColor="#999"
+          />
         </View>
 
         <View style={[styles.column, { flex: 1, marginLeft: 10 }]}>
@@ -135,12 +131,7 @@ const styles = StyleSheet.create({
     height: 100,
     textAlignVertical: "top",
   },
-  picker: {
-    borderWidth: 1.5,
-    borderColor: "#ddd",
-    borderRadius: 8,
-    backgroundColor: "#fff",
-  },
+  
   row: {
     flexDirection: "row",
     justifyContent: "space-between",
