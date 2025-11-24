@@ -1,11 +1,11 @@
 import React from "react";
 import {
-  Button,
   Image,
   ScrollView,
   StyleSheet,
   Text,
-  View,
+  TouchableOpacity,
+  View
 } from "react-native";
 
 // Glossary data matching the glossary.tsx structure
@@ -263,31 +263,22 @@ export function PipelineResultsScreen({
         {/* Action Buttons */}
         <View style={styles.actionsContainer}>
           {onSaveReport && (
-            <View style={styles.buttonWrapper}>
-              <Button
-                title="Save to History"
-                onPress={onSaveReport}
-                color="#FF9500"
-              />
-            </View>
-          )}
-          {onLearnMore && cnnResult && (
-            <View style={styles.buttonWrapper}>
-              <Button
-                title="Learn More"
-                onPress={onLearnMore}
-                color="#007AFF"
-              />
-            </View>
+            <TouchableOpacity
+              style={styles.actionButtonOutline}
+              onPress={onSaveReport}
+              activeOpacity={0.7}
+            >
+              <Text style={styles.actionButtonOutlineText}>Save to History</Text>
+            </TouchableOpacity>
           )}
           {onStartNew && (
-            <View style={styles.buttonWrapper}>
-              <Button
-                title="Start New Analysis"
-                onPress={onStartNew}
-                color="#34C759"
-              />
-            </View>
+            <TouchableOpacity
+              style={styles.actionButton}
+              onPress={onStartNew}
+              activeOpacity={0.7}
+            >
+              <Text style={styles.actionButtonText}>Start New Analysis</Text>
+            </TouchableOpacity>
           )}
         </View>
       </View>
@@ -296,6 +287,21 @@ export function PipelineResultsScreen({
 }
 
 const styles = StyleSheet.create({
+    actionButtonOutline: {
+      backgroundColor: '#fff',
+      borderWidth: 2,
+      borderColor: '#007AFF',
+      paddingVertical: 12,
+      paddingHorizontal: 20,
+      borderRadius: 8,
+      alignItems: 'center',
+      marginVertical: 8,
+    },
+    actionButtonOutlineText: {
+      color: '#007AFF',
+      fontSize: 16,
+      fontWeight: '600',
+    },
   scrollContainer: {
     flex: 1,
     backgroundColor: "#f5f5f5",
@@ -402,6 +408,19 @@ const styles = StyleSheet.create({
   },
   buttonWrapper: {
     marginVertical: 8,
+  },
+  actionButton: {
+    backgroundColor: '#007AFF',
+    paddingVertical: 12,
+    paddingHorizontal: 20,
+    borderRadius: 8,
+    alignItems: 'center',
+    marginVertical: 8,
+  },
+  actionButtonText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '600',
   },
   jointAnalysisContainer: {
     backgroundColor: '#f5f5f5',
