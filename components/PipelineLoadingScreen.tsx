@@ -39,24 +39,31 @@ export function PipelineLoadingScreen({
 
   // Determine current step based on logs
   const getCurrentStep = () => {
-    const lastLog = logs[logs.length - 1] || "";
-    if (lastLog.includes("Step 4") || lastLog.includes("Classification"))
-      return 4;
-    if (lastLog.includes("Step 3") || lastLog.includes("SEI")) return 3;
-    if (
-      lastLog.includes("Step 2") ||
-      lastLog.includes("BiLSTM") ||
-      lastLog.includes("Anomaly")
-    )
-      return 2;
-    if (
-      lastLog.includes("Step 1") ||
-      lastLog.includes("keypoint") ||
-      lastLog.includes("Processing frame")
-    )
-      return 1;
-    if (lastLog.includes("completed successfully")) return 5;
-    return 0;
+    // Check all logs to find the highest step number mentioned
+    let highestStep = 0;
+    
+    for (let i = logs.length - 1; i >= 0; i--) {
+      const log = logs[i];
+      
+      // Check for completed successfully (all steps done)
+      if (log.includes("completed successfully")) return 5;
+      
+      // Check for each step in reverse order (most recent first)
+      if (log.includes("Step 4") || log.includes("Classification")) {
+        return 4;
+      }
+      if (log.includes("Step 3") || log.includes("SEI image")) {
+        return 3;
+      }
+      if (log.includes("Step 2") || log.includes("BiLSTM") || log.includes("Anomaly")) {
+        return 2;
+      }
+      if (log.includes("Step 1") || log.includes("keypoint") || log.includes("Processing frame")) {
+        return 1;
+      }
+    }
+    
+    return highestStep;
   };
 
   const currentStep = getCurrentStep();
