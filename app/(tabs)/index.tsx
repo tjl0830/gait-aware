@@ -1,4 +1,4 @@
-import { Video } from "expo-av";
+import { ResizeMode, Video } from "expo-av";
 import { useRouter } from "expo-router";
 import { useVideoPlayer } from "expo-video";
 import React, { useEffect, useRef, useState } from "react";
@@ -12,7 +12,7 @@ import {
   Text,
   TouchableOpacity,
   useWindowDimensions,
-  View
+  View,
 } from "react-native";
 import { WebView } from "react-native-webview";
 // Use legacy API to avoid deprecation error in SDK 54
@@ -43,29 +43,33 @@ import { PoseResult } from "../../src/pipeline/pipelineTypes";
 
 export default function Tab() {
   // language toggle: 'en' = English, 'tl' = Tagalog
-  const [lang, setLang] = useState<'en' | 'tl'>('en');
+  const [lang, setLang] = useState<"en" | "tl">("en");
   const T = {
     en: {
-      quickTitle: 'Recording Tips',
-      item1: 'Place device on a stable surface or have someone hold it steady at waist height.',
-      item2: 'Turn the device sideways (landscape).',
-      item3: 'Stand to the side so the whole body (head to feet) is visible.',
-      item4: 'Walk straight from left → right across the frame.',
-      item5: 'Record at least 3 full steps but do not exceed 10 seconds.',
-      tip: 'Tip: Watch the sample video for an example.',
-      sampleLink: 'See sample video',
-      langToggle: 'TL',
+      quickTitle: "Recording Tips",
+      item1:
+        "Place device on a stable surface or have someone hold it steady at waist height.",
+      item2: "Turn the device sideways (landscape).",
+      item3: "Stand to the side so the whole body (head to feet) is visible.",
+      item4: "Walk straight from left → right across the frame.",
+      item5: "Record at least 3 full steps but do not exceed 10 seconds.",
+      tip: "Tip: Watch the sample video for an example.",
+      sampleLink: "See sample video",
+      langToggle: "TL",
     },
     tl: {
-      quickTitle: 'Tips sa Pagre-record',
-      item1: 'Ilagay ang device sa matibay na patungan o hayaan may humawak nito sa taas ng balakang.',
-      item2: 'I-turn ang device nang pahalang (landscape).',
-      item3: 'Tumayo sa gilid para makita ang buong katawan (ulo hanggang paa).',
-      item4: 'Maglakad nang diretso mula kaliwa → kanan sa frame.',
-      item5: 'Mag-record ng hindi bababa sa 3 buong hakbang ngunit huwag lalampas sa 10 segundo.',
-      tip: 'Tip: Panoorin ang sample video para halimbawa.',
-      sampleLink: 'Tingnan ang sample video',
-      langToggle: 'EN',
+      quickTitle: "Tips sa Pagre-record",
+      item1:
+        "Ilagay ang device sa matibay na patungan o hayaan may humawak nito sa taas ng balakang.",
+      item2: "I-turn ang device nang pahalang (landscape).",
+      item3:
+        "Tumayo sa gilid para makita ang buong katawan (ulo hanggang paa).",
+      item4: "Maglakad nang diretso mula kaliwa → kanan sa frame.",
+      item5:
+        "Mag-record ng hindi bababa sa 3 buong hakbang ngunit huwag lalampas sa 10 segundo.",
+      tip: "Tip: Panoorin ang sample video para halimbawa.",
+      sampleLink: "Tingnan ang sample video",
+      langToggle: "EN",
     },
   };
 
@@ -135,19 +139,24 @@ export default function Tab() {
 
   // Pipeline state
   const [isPipelineRunning, setIsPipelineRunning] = useState(false);
+  const [showResultsConfirmation, setShowResultsConfirmation] = useState(false);
   const [showResults, setShowResults] = useState(false);
   const [showUserInfoForm, setShowUserInfoForm] = useState(false);
   const [pipelineLogs, setPipelineLogs] = useState<string[]>([]);
   const logsRef = useRef<string[]>([]);
-  const [videoTotalFrames, setVideoTotalFrames] = useState<number | undefined>(undefined);
+  const [videoTotalFrames, setVideoTotalFrames] = useState<number | undefined>(
+    undefined
+  );
 
   // User info state
   const [userInfo, setUserInfo] = useState<{
     name: string;
     gender: string;
     age: string;
+    height: string;
+    weight: string;
     notes: string;
-  }>({ name: "", gender: "", age: "", notes: "" });
+  }>({ name: "", gender: "", age: "", height: "", weight: "", notes: "" });
 
   // Download progress state
   const [downloadStatus, setDownloadStatus] = useState<{
@@ -398,14 +407,22 @@ export default function Tab() {
       addLog(`  Result: ${anomalyResult.isAbnormal ? "ABNORMAL" : "NORMAL"}`);
       addLog(`  Confidence: ${anomalyResult.confidence.toFixed(2)}%`);
       addLog(`  Max Error: ${anomalyResult.maxError.toFixed(6)}`);
-      
+
       // Log worst joint if any are abnormal
-      const abnormalJoints = anomalyResult.jointErrors.filter(j => j.isAbnormal);
+      const abnormalJoints = anomalyResult.jointErrors.filter(
+        (j) => j.isAbnormal
+      );
       if (abnormalJoints.length > 0) {
-        addLog(`  ⚠️ ${abnormalJoints.length} joint(s) showing irregular patterns`);
-        addLog(`  Worst Joint: ${anomalyResult.worstJoint} (${anomalyResult.worstJointError.toFixed(6)})`);
+        addLog(
+          `  ⚠️ ${abnormalJoints.length} joint(s) showing irregular patterns`
+        );
+        addLog(
+          `  Worst Joint: ${
+            anomalyResult.worstJoint
+          } (${anomalyResult.worstJointError.toFixed(6)})`
+        );
       }
-      
+
       await new Promise((resolve) => setTimeout(resolve, 1000));
 
       // Step 3: Generate SEI
@@ -467,10 +484,10 @@ export default function Tab() {
       addLog("");
       addLog("🎉 Pipeline completed successfully!");
 
-      // Wait a moment before showing results
+      // Wait a moment before showing confirmation modal
       await new Promise((resolve) => setTimeout(resolve, 2000));
       setIsPipelineRunning(false);
-      setShowResults(true);
+      setShowResultsConfirmation(true);
     } catch (err: any) {
       addLog("");
       addLog(`❌ Error: ${err.message}`);
@@ -497,6 +514,8 @@ export default function Tab() {
       name: "",
       gender: "",
       age: "",
+      height: "",
+      weight: "",
       notes: "",
     });
     resetVideo();
@@ -532,14 +551,36 @@ export default function Tab() {
       const historyItem = {
         id: Date.now(),
         name: userInfo.name.trim() || "Unknown",
-        gaitType: cnnResult
-          ? `${cnnResult.predictedClass} (${(
-              cnnResult.confidence * 100
-            ).toFixed(0)}%)`
-          : "Unspecified",
-        jointDeviations: undefined, // Will be implemented later
+        gaitType: cnnResult ? cnnResult.predictedClass : "Unspecified",
+        jointDeviations: bilstmResult?.jointErrors
+          ? (() => {
+              // Filter out hip joints like in results screen
+              const filtered = bilstmResult.jointErrors.filter(
+                (j) => j.joint !== "LEFT_HIP" && j.joint !== "RIGHT_HIP"
+              );
+              const abnormal = filtered.filter((j) => j.isAbnormal);
+
+              if (abnormal.length === 0) {
+                return "None detected";
+              }
+
+              // Create friendly joint descriptions
+              return abnormal
+                .map((j) => {
+                  const jointName = j.joint.replace(/_/g, " ");
+                  const percentage = Math.min(
+                    100,
+                    (j.error / j.threshold) * 100
+                  ).toFixed(0);
+                  return `${jointName} (${percentage}%)`;
+                })
+                .join(", ");
+            })()
+          : "None detected",
         gender: userInfo.gender.trim() || undefined,
         age: userInfo.age.trim() || undefined,
+        height: userInfo.height.trim() || undefined,
+        weight: userInfo.weight.trim() || undefined,
         notes: userInfo.notes.trim() || undefined,
         images: imageUris,
         createdAt: new Date().toISOString(),
@@ -765,30 +806,59 @@ export default function Tab() {
 
             {/* Start Analysis (placed directly below the select video section) */}
             {/* Group wrapper to align Start button and instructions to the same width */}
-            <View style={{ width: "100%", maxWidth: 680, alignItems: "center", marginTop: 12 }}>
+            <View
+              style={{
+                width: "100%",
+                maxWidth: 680,
+                alignItems: "center",
+                marginTop: 12,
+              }}
+            >
               <View style={styles.nextButtonContainer}>
                 <TouchableOpacity
                   style={[
                     styles.nextButton,
-                    (!videoUri || !webViewReady || !cnnModelReady || !bilstmModelReady) &&
+                    (!videoUri ||
+                      !webViewReady ||
+                      !cnnModelReady ||
+                      !bilstmModelReady) &&
                       styles.nextButtonDisabled,
                   ]}
                   onPress={runCompletePipeline}
-                  disabled={!videoUri || !webViewReady || !cnnModelReady || !bilstmModelReady}
+                  disabled={
+                    !videoUri ||
+                    !webViewReady ||
+                    !cnnModelReady ||
+                    !bilstmModelReady
+                  }
                 >
                   <Text style={styles.nextButtonText}>
-                    {!webViewReady || !cnnModelReady || !bilstmModelReady ? "Loading models..." : "Start Analysis"}
+                    {!webViewReady || !cnnModelReady || !bilstmModelReady
+                      ? "Loading models..."
+                      : "Start Analysis"}
                   </Text>
                 </TouchableOpacity>
               </View>
 
               {/* Clear, easy-to-read recording instructions shown AFTER the Start Analysis button.
                   The instructions container now fills the same width as the button above. */}
-              <View style={[styles.instructionsContainer, { width: "100%", marginTop: 12 }]}>
-                <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
-                  <Text style={styles.instructionsTitle}>{T[lang].quickTitle}</Text>
-                  <TouchableOpacity onPress={() => setLang(l => (l === "en" ? "tl" : "en"))} style={styles.langToggleSubtle}>
-                    <Text style={styles.langToggleSubtleText}>{T[lang].langToggle}</Text>
+              <View
+                style={[
+                  styles.instructionsContainer,
+                  { width: "100%", marginTop: 12 },
+                ]}
+              >
+                <View style={styles.instructionsHeader}>
+                  <Text style={styles.instructionsTitle}>
+                    {T[lang].quickTitle}
+                  </Text>
+                  <TouchableOpacity
+                    onPress={() => setLang((l) => (l === "en" ? "tl" : "en"))}
+                    style={styles.langToggleSubtle}
+                  >
+                    <Text style={styles.langToggleSubtleText}>
+                      {T[lang].langToggle}
+                    </Text>
                   </TouchableOpacity>
                 </View>
                 <Text style={styles.instructionItem}>• {T[lang].item1}</Text>
@@ -797,7 +867,11 @@ export default function Tab() {
                 <Text style={styles.instructionItem}>• {T[lang].item4}</Text>
                 <Text style={styles.instructionItem}>• {T[lang].item5}</Text>
                 <Text style={styles.instructionTip}>
-                  <Text onPress={() => setSampleVisible(true)} style={styles.sampleLinkInline} accessibilityRole="link">
+                  <Text
+                    onPress={() => setSampleVisible(true)}
+                    style={styles.sampleLinkInline}
+                    accessibilityRole="link"
+                  >
                     Click here to see sample video.
                   </Text>
                 </Text>
@@ -1005,20 +1079,62 @@ export default function Tab() {
         </ScrollView>
       )}
 
+      {/* Results Confirmation Modal */}
+      <Modal
+        visible={showResultsConfirmation}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={() => {
+          setShowResultsConfirmation(false);
+          startNewAnalysis();
+        }}
+      >
+        <View style={styles.confirmModalOverlay}>
+          <View style={styles.confirmModalContent}>
+            <Text style={styles.confirmModalTitle}>Analysis Complete!</Text>
+            <Text style={styles.confirmModalMessage}>
+              Your gait analysis is ready. Remember, these are educational
+              estimates to help you learn about walking patterns, not medical
+              advice.
+            </Text>
+
+            <TouchableOpacity
+              style={styles.confirmModalButtonSingle}
+              onPress={() => {
+                setShowResultsConfirmation(false);
+                setShowResults(true);
+              }}
+              activeOpacity={0.7}
+            >
+              <Text style={styles.confirmModalButtonTextPrimary}>
+                View My Results
+              </Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
       {/* Sample Video Modal (plays bundled assets/test_videos/Rebb_normal.mp4) */}
-      <Modal visible={sampleVisible} animationType="slide" onRequestClose={() => setSampleVisible(false)}>
+      <Modal
+        visible={sampleVisible}
+        animationType="slide"
+        onRequestClose={() => setSampleVisible(false)}
+      >
         <View style={styles.sampleModalContent}>
           {sampleVideoUri ? (
             <Video
               source={{ uri: sampleVideoUri }}
               useNativeControls
-              resizeMode="contain"
+              resizeMode={ResizeMode.CONTAIN}
               style={{ width: "100%", height: 360, backgroundColor: "#000" }}
             />
           ) : (
             <Text style={{ color: "#fff" }}>Sample video not available</Text>
           )}
-          <TouchableOpacity onPress={() => setSampleVisible(false)} style={{ marginTop: 12 }}>
+          <TouchableOpacity
+            onPress={() => setSampleVisible(false)}
+            style={{ marginTop: 12 }}
+          >
             <Text style={styles.sampleCloseText}>Close</Text>
           </TouchableOpacity>
         </View>
@@ -1059,14 +1175,27 @@ const styles = StyleSheet.create({
     alignItems: "center",
     marginTop: 20,
     maxWidth: 600,
-    backgroundColor: "#fff",
-    padding: 20,
-    borderRadius: 8,
   },
-  sampleLinkWrap: { width: "100%", maxWidth: 600, alignItems: "flex-start", marginTop: 12 },
+  sampleLinkWrap: {
+    width: "100%",
+    maxWidth: 600,
+    alignItems: "flex-start",
+    marginTop: 12,
+  },
   sampleLink: { color: "#0b62d6", fontWeight: "600" },
-  sampleModalContent: { flex: 1, backgroundColor: "#000", padding: 16, justifyContent: "center", alignItems: "center" },
-  sampleCloseText: { color: "#fff", fontSize: 16, fontWeight: "600", marginTop: 8 },
+  sampleModalContent: {
+    flex: 1,
+    backgroundColor: "#000",
+    padding: 16,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  sampleCloseText: {
+    color: "#fff",
+    fontSize: 16,
+    fontWeight: "600",
+    marginTop: 8,
+  },
   extractionContainer: {
     width: "100%",
     maxWidth: 600,
@@ -1284,11 +1413,20 @@ const styles = StyleSheet.create({
     borderColor: "#f1d8b0",
     maxWidth: 680,
   },
+  instructionsHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    flexWrap: "wrap",
+    gap: 8,
+    marginBottom: 8,
+  },
   instructionsTitle: {
     fontSize: 20,
     fontWeight: "700",
     color: "#111",
-    marginBottom: 8,
+    flex: 1,
+    minWidth: 150,
   },
   instructionItem: {
     fontSize: 18,
@@ -1306,10 +1444,10 @@ const styles = StyleSheet.create({
   langToggleSubtle: {
     paddingVertical: 4,
     paddingHorizontal: 8,
-    backgroundColor: '#0b62d6',
+    backgroundColor: "#0b62d6",
     borderRadius: 12,
     // reduced shadow for subtle prominence
-    shadowColor: '#000',
+    shadowColor: "#000",
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.08,
     shadowRadius: 2,
@@ -1317,10 +1455,97 @@ const styles = StyleSheet.create({
     borderWidth: 0,
   },
   langToggleSubtleText: {
-    color: '#fff',
+    color: "#fff",
     fontSize: 12,
-    fontWeight: '700',
+    fontWeight: "700",
   },
-  sampleLinkInline: { color: "#0b62d6", fontWeight: "800", textDecorationLine: "underline", fontSize: 17 },
-  largeTouchable: { minHeight: 48, minWidth: 48, justifyContent: "center", alignItems: "center" },
+  sampleLinkInline: {
+    color: "#0b62d6",
+    fontWeight: "800",
+    textDecorationLine: "underline",
+    fontSize: 17,
+  },
+  largeTouchable: {
+    minHeight: 48,
+    minWidth: 48,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  // Results Confirmation Modal styles
+  confirmModalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0, 0, 0, 0.7)",
+    justifyContent: "center",
+    alignItems: "center",
+    padding: 20,
+  },
+  confirmModalContent: {
+    backgroundColor: "#fff",
+    borderRadius: 16,
+    padding: 24,
+    width: "90%",
+    maxWidth: 400,
+    alignItems: "center",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 8,
+  },
+  confirmModalIcon: {
+    fontSize: 48,
+    marginBottom: 16,
+  },
+  confirmModalTitle: {
+    fontSize: 22,
+    fontWeight: "bold",
+    color: "#333",
+    marginBottom: 12,
+    textAlign: "center",
+  },
+  confirmModalMessage: {
+    fontSize: 16,
+    color: "#666",
+    textAlign: "center",
+    lineHeight: 24,
+    marginBottom: 24,
+  },
+  confirmModalButtons: {
+    flexDirection: "row",
+    gap: 12,
+    width: "100%",
+  },
+  confirmModalButton: {
+    flex: 1,
+    paddingVertical: 14,
+    paddingHorizontal: 20,
+    borderRadius: 8,
+    alignItems: "center",
+  },
+  confirmModalButtonSingle: {
+    width: "100%",
+    paddingVertical: 16,
+    paddingHorizontal: 24,
+    borderRadius: 8,
+    alignItems: "center",
+    backgroundColor: "#007AFF",
+  },
+  confirmModalButtonPrimary: {
+    backgroundColor: "#007AFF",
+  },
+  confirmModalButtonSecondary: {
+    backgroundColor: "#f0f0f0",
+    borderWidth: 1,
+    borderColor: "#ddd",
+  },
+  confirmModalButtonTextPrimary: {
+    color: "#fff",
+    fontSize: 16,
+    fontWeight: "600",
+  },
+  confirmModalButtonTextSecondary: {
+    color: "#666",
+    fontSize: 16,
+    fontWeight: "600",
+  },
 });

@@ -41,13 +41,13 @@ export function PipelineLoadingScreen({
   const getCurrentStep = () => {
     // Check all logs to find the highest step number mentioned
     let highestStep = 0;
-    
+
     for (let i = logs.length - 1; i >= 0; i--) {
       const log = logs[i];
-      
+
       // Check for completed successfully (all steps done)
       if (log.includes("completed successfully")) return 5;
-      
+
       // Check for each step in reverse order (most recent first)
       if (log.includes("Step 4") || log.includes("Classification")) {
         return 4;
@@ -55,19 +55,27 @@ export function PipelineLoadingScreen({
       if (log.includes("Step 3") || log.includes("SEI image")) {
         return 3;
       }
-      if (log.includes("Step 2") || log.includes("BiLSTM") || log.includes("Anomaly")) {
+      if (
+        log.includes("Step 2") ||
+        log.includes("BiLSTM") ||
+        log.includes("Anomaly")
+      ) {
         return 2;
       }
-      if (log.includes("Step 1") || log.includes("keypoint") || log.includes("Processing frame")) {
+      if (
+        log.includes("Step 1") ||
+        log.includes("keypoint") ||
+        log.includes("Processing frame")
+      ) {
         return 1;
       }
     }
-    
+
     return highestStep;
   };
 
   const currentStep = getCurrentStep();
-  
+
   // Build step labels with dynamic frame progress for step 1
   const getStepLabel = (stepId: number, baseLabel: string) => {
     if (stepId === 1 && currentStep === 1 && currentFrame && totalFrames) {
@@ -140,26 +148,15 @@ export function PipelineLoadingScreen({
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#f5f5f5",
+    backgroundColor: "#fff",
     justifyContent: "center",
     alignItems: "center",
-    padding: 20,
+    padding: 32,
   },
   content: {
     width: "100%",
     maxWidth: 600,
-    backgroundColor: "#fff",
-    borderRadius: 12,
-    padding: 32,
     alignItems: "center",
-    shadowColor: "#000",
-    shadowOffset: {
-      width: 0,
-      height: 2,
-    },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-    elevation: 4,
   },
   spinner: {
     marginBottom: 24,

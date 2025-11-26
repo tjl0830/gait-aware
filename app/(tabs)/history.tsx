@@ -31,6 +31,8 @@ type HistoryItem = {
   pdfPath?: string; // local saved PDF path (file://...)
   gender?: string;
   age?: string;
+  height?: string;
+  weight?: string;
   notes?: string;
   // BiLSTM Pattern Analysis data
   patternAnalysis?: {
@@ -253,7 +255,7 @@ export default function Tab() {
       fontBold = font;
     }
 
-    const page = (pdfDoc as any).addPage([612, 792]); // US Letter
+    let page = (pdfDoc as any).addPage([612, 1008]); // US Legal (8.5" x 14") - changed from Letter for more vertical space
     const pageWidth = page.getWidth();
     const pageHeight = page.getHeight();
 
@@ -353,8 +355,8 @@ export default function Tab() {
     // --- Disclaimer (centered, small) ---
     try {
       const disclaimer =
-        "Disclaimer: The analysis results are for informational purposes only and are not clinical diagnoses. Consult a healthcare professional for clinical assessment.";
-      const size = 14;
+        "IMPORTANT NOTICE: This analysis is provided for informational and educational purposes only. It is NOT a medical diagnosis and should NOT replace professional medical advice. GaitAware uses artificial intelligence to analyze walking patterns, but we are not medical professionals. Please consult a qualified healthcare provider or physical therapist for proper evaluation and diagnosis. If you have concerns about your walking or mobility, seek professional medical care.";
+      const size = 9;
       const maxW = maxContentWidth;
       function wrapText(text: string, f: any, s: number, mw: number) {
         const words = text.split(" ");
@@ -373,6 +375,22 @@ export default function Tab() {
         return lines;
       }
       const lines = wrapText(disclaimer, font, size, maxW);
+
+      // Draw light background box for disclaimer
+      const disclaimerHeight = lines.length * (size + 4) + 12;
+      try {
+        if (lightGray)
+          page.drawRectangle({
+            x: margin - 8,
+            y: y - disclaimerHeight + 4,
+            width: pageWidth - margin * 2 + 16,
+            height: disclaimerHeight,
+            color: lightGray,
+            opacity: 0.3,
+          });
+      } catch {}
+
+      y -= 6; // padding top
       for (const ln of lines) {
         const textWidth = font.widthOfTextAtSize(ln, size);
         const x = (pageWidth - textWidth) / 2;
@@ -385,9 +403,40 @@ export default function Tab() {
       console.warn("Failed to draw disclaimer", e);
     }
 
+    // Check if we need a new page before User Information
     if (y < 180) {
-      (pdfDoc as any).addPage([pageWidth, pageHeight]);
+      const newPage = (pdfDoc as any).addPage([pageWidth, pageHeight]);
+      page = newPage; // Update page reference
       y = pageHeight - margin;
+    }
+
+    // --- Analysis Date/Time (right-aligned, above User Information) ---
+    try {
+      const dateObj = new Date(item.createdAt);
+      const dateStr = dateObj.toLocaleDateString("en-US", {
+        year: "numeric",
+        month: "long",
+        day: "numeric",
+      });
+      const timeStr = dateObj.toLocaleTimeString("en-US", {
+        hour: "numeric",
+        minute: "2-digit",
+        hour12: true,
+      });
+      const dateTimeText = `Analysis Date: ${dateStr} at ${timeStr}`;
+      const dateSize = 10;
+      const dateWidth = font.widthOfTextAtSize(dateTimeText, dateSize);
+      const dateX = pageWidth - margin - dateWidth;
+      page.drawText(dateTimeText, {
+        x: dateX,
+        y,
+        size: dateSize,
+        font,
+        color: gray,
+      });
+      y -= dateSize + 16;
+    } catch (e) {
+      console.warn("Failed to draw date/time", e);
     }
 
     // --- User Information section ---
@@ -446,6 +495,26 @@ export default function Tab() {
         font,
         color: gray,
       });
+      cursorY -= labelSize + 6;
+
+      drawBold(page, "Height:", margin, cursorY, labelSize);
+      page.drawText(` ${item.height ? item.height + " cm" : "—"}`, {
+        x: margin + 50,
+        y: cursorY,
+        size: valueSize,
+        font,
+        color: gray,
+      });
+      cursorY -= labelSize + 6;
+
+      drawBold(page, "Weight:", margin, cursorY, labelSize);
+      page.drawText(` ${item.weight ? item.weight + " kg" : "—"}`, {
+        x: margin + 54,
+        y: cursorY,
+        size: valueSize,
+        font,
+        color: gray,
+      });
       cursorY -= labelSize + 8;
 
       drawBold(page, "Notes:", margin, cursorY, labelSize);
@@ -484,113 +553,187 @@ export default function Tab() {
         cursorY -= valueSize + 4;
       }
 
-      // move y below user info box
-      y = y - infoBoxHeight - 8;
+      // move y below user info section with proper spacing
+      y = cursorY - 16; // Use actual cursorY position with extra spacing
     } catch (e) {
       console.warn("User info section failed", e);
     }
 
-    // --- Analysis Results ---
+    // Check if we need a new page before Summary
+    if (y < 400) {
+      const newPage = (pdfDoc as any).addPage([pageWidth, pageHeight]);
+      page = newPage;
+      y = pageHeight - margin;
+    }
+
+    // --- Summary Section (Quick Overview) ---
     try {
       const sectionTitleSize = 14;
-      drawBold(page, "Analysis Results", margin, y, sectionTitleSize);
+      drawBold(page, "Summary", margin, y, sectionTitleSize);
+      y -= sectionTitleSize + 8;
+      drawHr(page, margin, pageWidth - margin, y + 6);
+      y -= 14;
+
+      // Determine overall status
+      const isAbnormal = item.patternAnalysis?.isAbnormal ?? false;
+      const hasAbnormalJoints = item.patternAnalysis?.jointErrors
+        ? item.patternAnalysis.jointErrors.filter(
+            (j: any) =>
+              j.isAbnormal && j.joint !== "LEFT_HIP" && j.joint !== "RIGHT_HIP"
+          ).length > 0
+        : false;
+
+      const overallStatus =
+        isAbnormal || hasAbnormalJoints ? "Attention Needed" : "Normal";
+
+      // Overall Assessment
+      drawBold(page, "Overall Assessment:", margin, y, 11);
+      page.drawText(overallStatus, {
+        x: margin + 140,
+        y,
+        size: 11,
+        font: fontBold,
+        color: rgb(0, 0, 0), // Black color
+      });
+      y -= 18;
+
+      // Walking Type
+      const walkingType = item.gaitType?.split("(")[0].trim() ?? "—";
+      drawBold(page, "Walking Type:", margin, y, 11);
+      page.drawText(walkingType, {
+        x: margin + 95,
+        y,
+        size: 11,
+        font,
+        color: rgb(0, 0, 0), // Black color
+      });
+      y -= 16;
+
+      // Movement Pattern
+      const movementPattern = item.patternAnalysis?.isAbnormal
+        ? "Irregular pattern detected"
+        : "Normal pattern";
+      drawBold(page, "Movement Pattern:", margin, y, 11);
+      page.drawText(movementPattern, {
+        x: margin + 130,
+        y,
+        size: 11,
+        font,
+        color: rgb(0, 0, 0), // Black color
+      });
+      y -= 24;
+    } catch (e) {
+      console.warn("Summary section failed", e);
+    }
+
+    // --- Joint Movement Analysis (Detailed Findings) ---
+    try {
+      const sectionTitleSize = 14;
+      drawBold(page, "Joint Movement Details", margin, y, sectionTitleSize);
       y -= sectionTitleSize + 8;
       drawHr(page, margin, pageWidth - margin, y + 6);
       y -= 10;
 
-      // Pattern Analysis (Most Important - from BiLSTM)
-      if (item.patternAnalysis) {
-        const pa = item.patternAnalysis;
-        drawBold(page, "Pattern Analysis:", margin, y, 12);
-        y -= 16;
+      // Add explanation about percentages
+      page.drawText("(Values at 100% indicate irregular movement)", {
+        x: margin,
+        y,
+        size: 9,
+        font,
+        color: gray,
+      });
+      y -= 18;
 
-        const patternText = pa.isAbnormal
-          ? "Irregular pattern detected"
-          : "Normal pattern";
-        const patternColor = pa.isAbnormal
-          ? rgb(0.93, 0.42, 0) // Orange for abnormal
-          : rgb(0.18, 0.49, 0.2); // Green for normal
+      // Display joint data if available
+      if (item.patternAnalysis?.jointErrors) {
+        const joints = item.patternAnalysis.jointErrors.filter(
+          (j: any) => j.joint !== "LEFT_HIP" && j.joint !== "RIGHT_HIP"
+        );
 
-        page.drawText(`•  ${patternText}`, {
-          x: margin + 4,
-          y,
-          size: 11,
-          font: fontBold,
-          color: patternColor,
-        });
-        y -= 14;
+        if (joints.length > 0) {
+          const abnormalCount = joints.filter((j: any) => j.isAbnormal).length;
 
-        const confidenceText = `   Confidence: ${(pa.confidence * 100).toFixed(
-          0
-        )}%`;
-        page.drawText(confidenceText, {
-          x: margin + 4,
+          // Summary line
+          const summaryText =
+            abnormalCount > 0
+              ? `${abnormalCount} out of ${joints.length} joints need attention`
+              : `All ${joints.length} joints moving normally`;
+          page.drawText("   " + summaryText, {
+            x: margin + 4,
+            y,
+            size: 10,
+            font: fontBold,
+            color:
+              abnormalCount > 0 ? rgb(0.93, 0.42, 0) : rgb(0.18, 0.49, 0.2),
+          });
+          y -= 16;
+
+          // List each joint
+          for (const joint of joints) {
+            const percentage = Math.min(
+              100,
+              (joint.error / joint.threshold) * 100
+            ).toFixed(0);
+            const jointName = joint.joint.replace(/_/g, " ");
+            const status = joint.isAbnormal ? "Needs attention" : "Normal";
+            const statusColor = joint.isAbnormal
+              ? rgb(0.93, 0.42, 0)
+              : rgb(0.18, 0.49, 0.2);
+
+            // Joint name and percentage
+            page.drawText(`   • ${jointName}:`, {
+              x: margin + 8,
+              y,
+              size: 10,
+              font,
+              color: gray,
+            });
+            page.drawText(`${percentage}%`, {
+              x: margin + 180,
+              y,
+              size: 10,
+              font: fontBold,
+              color: statusColor,
+            });
+            page.drawText(`[${status}]`, {
+              x: margin + 230,
+              y,
+              size: 9,
+              font,
+              color: statusColor,
+            });
+            y -= 14;
+
+            // Check if we need a new page for joint list
+            if (y < margin + 100) {
+              const newPage = (pdfDoc as any).addPage([pageWidth, pageHeight]);
+              page = newPage; // Update page reference
+              y = pageHeight - margin;
+            }
+          }
+        } else {
+          page.drawText("   • No joint data available", {
+            x: margin + 8,
+            y,
+            size: 10,
+            font,
+            color: gray,
+          });
+          y -= 16;
+        }
+      } else {
+        // Fallback to old jointDeviations text if no structured data
+        const abnormalitiesText = item.jointDeviations
+          ? item.jointDeviations
+          : "None detected";
+        page.drawText(`   • ${abnormalitiesText}`, {
+          x: margin + 8,
           y,
           size: 10,
           font,
           color: gray,
         });
-        y -= 18;
-
-        // Friendly explanation
-        const explanation = pa.isAbnormal
-          ? "Your walking pattern shows some variations. Consider consulting a healthcare professional for evaluation."
-          : "Your walking pattern appears healthy and balanced.";
-
-        page.drawText("   " + explanation, {
-          x: margin + 4,
-          y,
-          size: 9,
-          font,
-          color: gray,
-        });
-        y -= 20;
-      }
-
-      // Gait classification (from CNN)
-      drawBold(page, "Gait Classification:", margin, y, 12);
-      page.drawText(` ${item.gaitType ?? "—"}`, {
-        x: margin + 120,
-        y,
-        size: 11,
-        font,
-        color: gray,
-      });
-      y -= 20;
-
-      // Detected potential joint abnormalities
-      drawBold(page, "Detected potential joint abnormalities:", margin, y, 12);
-      y -= 16;
-
-      const abnormalitiesText = item.jointDeviations
-        ? item.jointDeviations
-        : "None detected";
-      const abLines = (() => {
-        const words = abnormalitiesText.split(" ");
-        const lines: string[] = [];
-        let line = "";
-        const maxW = maxContentWidth;
-        for (const w of words) {
-          const test = line ? `${line} ${w}` : w;
-          const width = font.widthOfTextAtSize(test, 11);
-          if (width <= maxW) line = test;
-          else {
-            if (line) lines.push(line);
-            line = w;
-          }
-        }
-        if (line) lines.push(line);
-        return lines;
-      })();
-
-      for (const ln of abLines) {
-        page.drawText("•", { x: margin + 2, y, size: 11, font });
-        page.drawText(ln, { x: margin + 12, y, size: 11, font, color: gray });
         y -= 16;
-        if (y < margin + 80) {
-          (pdfDoc as any).addPage([pageWidth, pageHeight]);
-          y = pageHeight - margin;
-        }
       }
 
       // Add space before SEI image
@@ -604,7 +747,8 @@ export default function Tab() {
       try {
         // Check if we need a new page
         if (y < 280) {
-          (pdfDoc as any).addPage([pageWidth, pageHeight]);
+          const newPage = (pdfDoc as any).addPage([pageWidth, pageHeight]);
+          page = newPage; // Update page reference
           y = pageHeight - margin;
         }
 

@@ -6,12 +6,16 @@ interface UserInfoProps {
     name: string;
     gender: string;
     age: string;
+    height: string;
+    weight: string;
     notes: string;
   };
   onChange?: (data: {
     name: string;
     gender: string;
     age: string;
+    height: string;
+    weight: string;
     notes: string;
   }) => void;
 }
@@ -21,6 +25,8 @@ function UserInfo({ initialData, onChange }: UserInfoProps = {}) {
     name: "",
     gender: "",
     age: "",
+    height: "",
+    weight: "",
     notes: "",
   });
 
@@ -81,6 +87,40 @@ function UserInfo({ initialData, onChange }: UserInfoProps = {}) {
         </View>
       </View>
 
+      <View style={[styles.formGroup, styles.row]}>
+        <View style={[styles.column, { flex: 1, marginRight: 10 }]}>
+          <Text style={styles.label}>Height (cm)</Text>
+          <TextInput
+            style={styles.input}
+            value={formData.height}
+            onChangeText={(value) => {
+              const newData = { ...formData, height: value };
+              setFormData(newData);
+              onChange?.(newData);
+            }}
+            keyboardType="numeric"
+            placeholder="e.g., 165"
+            placeholderTextColor="#999"
+          />
+        </View>
+
+        <View style={[styles.column, { flex: 1, marginLeft: 10 }]}>
+          <Text style={styles.label}>Weight (kg)</Text>
+          <TextInput
+            style={styles.input}
+            value={formData.weight}
+            onChangeText={(value) => {
+              const newData = { ...formData, weight: value };
+              setFormData(newData);
+              onChange?.(newData);
+            }}
+            keyboardType="numeric"
+            placeholder="e.g., 70"
+            placeholderTextColor="#999"
+          />
+        </View>
+      </View>
+
       <View style={styles.formGroup}>
         <Text style={styles.label}>Additional Notes</Text>
         <TextInput
@@ -131,7 +171,7 @@ const styles = StyleSheet.create({
     height: 100,
     textAlignVertical: "top",
   },
-  
+
   row: {
     flexDirection: "row",
     justifyContent: "space-between",
