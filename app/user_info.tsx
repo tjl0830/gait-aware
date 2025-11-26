@@ -1,41 +1,35 @@
-import { Picker } from '@react-native-picker/picker';
-import * as ImagePicker from 'expo-image-picker';
-import React, { useEffect, useState } from 'react';
-import {
-  Image,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View
-} from 'react-native';
+import React, { useEffect, useState } from "react";
+import { StyleSheet, Text, TextInput, View } from "react-native";
 
 interface UserInfoProps {
   initialData?: {
-    profilePicture: string;
     name: string;
     gender: string;
     age: string;
+    height: string;
+    weight: string;
     notes: string;
   };
   onChange?: (data: {
-    profilePicture: string;
     name: string;
     gender: string;
     age: string;
+    height: string;
+    weight: string;
     notes: string;
   }) => void;
 }
 
 function UserInfo({ initialData, onChange }: UserInfoProps = {}) {
   const [formData, setFormData] = useState({
-    profilePicture: '',
-    name: '',
-    gender: '',
-    age: '',
-    notes: ''
+    name: "",
+    gender: "",
+    age: "",
+    height: "",
+    weight: "",
+    notes: "",
   });
-  
+
   // Initialize with initialData if provided
   useEffect(() => {
     if (initialData) {
@@ -43,43 +37,8 @@ function UserInfo({ initialData, onChange }: UserInfoProps = {}) {
     }
   }, [initialData]);
 
-  const pickImage = async () => {
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
-      allowsEditing: true,
-      aspect: [4, 4],
-      quality: 1,
-    });
-
-    if (!result.canceled && result.assets[0].uri) {
-      const newData = {
-        ...formData,
-        profilePicture: result.assets[0].uri
-      };
-      setFormData(newData);
-      onChange?.(newData);
-    }
-  };
-
-  const handleSubmit = () => {
-    console.log('Form submitted:', formData);
-  };
-
   return (
     <View style={styles.container}>
-      <View style={styles.formGroup}>
-        <Text style={styles.label}>Profile Picture</Text>
-        <TouchableOpacity onPress={pickImage} style={styles.imagePicker}>
-          <Text>Select Image</Text>
-        </TouchableOpacity>
-        {formData.profilePicture ? (
-          <Image 
-            source={{ uri: formData.profilePicture }}
-            style={styles.preview}
-          />
-        ) : null}
-      </View>
-
       <View style={styles.formGroup}>
         <Text style={styles.label}>Name</Text>
         <TextInput
@@ -90,26 +49,25 @@ function UserInfo({ initialData, onChange }: UserInfoProps = {}) {
             setFormData(newData);
             onChange?.(newData);
           }}
-          placeholder="Enter your name"
+          placeholder="e.g., John Doe"
+          placeholderTextColor="#999"
         />
       </View>
 
       <View style={[styles.formGroup, styles.row]}>
         <View style={[styles.column, { flex: 1, marginRight: 10 }]}>
           <Text style={styles.label}>Gender</Text>
-          <Picker
-            selectedValue={formData.gender}
-            onValueChange={(value) => {
+          <TextInput
+            style={styles.input}
+            value={formData.gender}
+            onChangeText={(value) => {
               const newData = { ...formData, gender: value };
               setFormData(newData);
               onChange?.(newData);
             }}
-            style={styles.picker}
-          >
-            <Picker.Item label="Select gender" value="" />
-            <Picker.Item label="Male" value="male" />
-            <Picker.Item label="Female" value="female" />
-          </Picker>
+            placeholder="e.g., Male / Female / Other"
+            placeholderTextColor="#999"
+          />
         </View>
 
         <View style={[styles.column, { flex: 1, marginLeft: 10 }]}>
@@ -123,14 +81,48 @@ function UserInfo({ initialData, onChange }: UserInfoProps = {}) {
               onChange?.(newData);
             }}
             keyboardType="numeric"
-            placeholder="Enter your age"
+            placeholder="e.g., 65"
+            placeholderTextColor="#999"
           />
         </View>
       </View>
 
+      <View style={[styles.formGroup, styles.row]}>
+        <View style={[styles.column, { flex: 1, marginRight: 10 }]}>
+          <Text style={styles.label}>Height (cm)</Text>
+          <TextInput
+            style={styles.input}
+            value={formData.height}
+            onChangeText={(value) => {
+              const newData = { ...formData, height: value };
+              setFormData(newData);
+              onChange?.(newData);
+            }}
+            keyboardType="numeric"
+            placeholder="e.g., 165"
+            placeholderTextColor="#999"
+          />
+        </View>
+
+        <View style={[styles.column, { flex: 1, marginLeft: 10 }]}>
+          <Text style={styles.label}>Weight (kg)</Text>
+          <TextInput
+            style={styles.input}
+            value={formData.weight}
+            onChangeText={(value) => {
+              const newData = { ...formData, weight: value };
+              setFormData(newData);
+              onChange?.(newData);
+            }}
+            keyboardType="numeric"
+            placeholder="e.g., 70"
+            placeholderTextColor="#999"
+          />
+        </View>
+      </View>
 
       <View style={styles.formGroup}>
-        <Text style={styles.label}>Notes</Text>
+        <Text style={styles.label}>Additional Notes</Text>
         <TextInput
           style={[styles.input, styles.textArea]}
           value={formData.notes}
@@ -141,7 +133,8 @@ function UserInfo({ initialData, onChange }: UserInfoProps = {}) {
           }}
           multiline={true}
           numberOfLines={4}
-          placeholder="Enter notes"
+          placeholder="e.g., Left knee pain, recent surgery, etc."
+          placeholderTextColor="#999"
         />
       </View>
     </View>
@@ -150,94 +143,43 @@ function UserInfo({ initialData, onChange }: UserInfoProps = {}) {
 
 const styles = StyleSheet.create({
   container: {
-    width: '100%',
-    alignSelf: 'center',
-    alignItems: 'center', // Add this to center children horizontally
-    marginTop: 20,
+    width: "100%",
+    alignSelf: "center",
+    marginTop: 8,
     maxWidth: 600,
-    backgroundColor: '#fff',
-    padding: 20,
-    borderRadius: 8,
-  },
-  title: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    marginBottom: 20,
   },
   formGroup: {
     marginBottom: 20,
-    width: '100%', // Add this to make the form group take full width
+    width: "100%",
   },
   label: {
     fontSize: 16,
     marginBottom: 8,
-    fontWeight: '500',
+    fontWeight: "500",
+    color: "#333",
   },
   input: {
-    borderWidth: 1,
-    borderColor: '#ccc',
-    borderRadius: 4,
-    padding: 10,
+    borderWidth: 1.5,
+    borderColor: "#ddd",
+    borderRadius: 8,
+    padding: 14,
     fontSize: 16,
-    width: '100%', // Add this to make inputs take full width
+    width: "100%",
+    backgroundColor: "#fff",
   },
   textArea: {
     height: 100,
-    textAlignVertical: 'top',
-    
+    textAlignVertical: "top",
   },
-  picker: {
-    borderWidth: 1,
-    borderColor: '#ccc',
-    borderRadius: 4,
-  },
-  preview: {
-    width: 200,
-    height: 200,
-    marginTop: 10,
-    borderRadius: 4,
-    alignSelf: 'center', // Add this to center the image
-  },
-  imagePicker: {
-    padding: 10,
-    borderWidth: 1,
-    borderColor: '#ccc',
-    borderRadius: 4,
-    alignItems: 'center',
-  },
-  // button: {
-  //   backgroundColor: '#0070f3',
-  //   padding: 15,
-  //   borderRadius: 4,
-  //   alignItems: 'center',
-  //   marginTop: 20,
-  // },
-  // buttonText: {
-  //   color: 'white',
-  //   fontSize: 16,
-  //   fontWeight: '500',
-  // },
 
-  button: {
-    backgroundColor: '#007AFF',
-    paddingHorizontal: 20,
-    paddingVertical: 12,
-    borderRadius: 8,
-  },
-  buttonText: {
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: '600',
-  },
   row: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    width: '100%',
+    flexDirection: "row",
+    justifyContent: "space-between",
+    width: "100%",
   },
   column: {
     flex: 1,
   },
-
 });
 
 export default UserInfo;
