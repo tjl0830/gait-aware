@@ -104,7 +104,9 @@ export default function Tab() {
   const [seiPng, setSeiPng] = useState<string | null>(null);
   const [seiSavedPath, setSeiSavedPath] = useState<string | null>(null);
   const [generating, setGenerating] = useState(false);
+  // Hold the MediaPipe HTML file (read as string) for WebView
   const [htmlContent, setHtmlContent] = useState<string>("");
+  const [htmlBaseUrl, setHtmlBaseUrl] = useState<string>(""); // Store base URL for relative paths
   const [cnnResult, setCnnResult] = useState<{
     predictedClass: string;
     confidence: number;
@@ -181,15 +183,21 @@ export default function Tab() {
   useEffect(() => {
     async function loadHTML() {
       try {
-        const moduleId = require("../web/mediapipe_pose.html");
+        const moduleId = require("../../assets/web/mediapipe_pose.html");
         const asset = Asset.fromModule(moduleId);
         // Ensure the asset is available locally; on native this resolves a file:// URI
         await asset.downloadAsync();
         if (!asset.localUri)
           throw new Error("HTML asset localUri not available");
+        
+        // Store the base URL for WebView to resolve relative paths
+        setHtmlBaseUrl(asset.localUri);
+        
         // Read the HTML file contents and feed it directly to WebView
         const content = await FileSystem.readAsStringAsync(asset.localUri);
         setHtmlContent(content);
+        
+        console.log("[MediaPipe] HTML loaded from:", asset.localUri);
       } catch (err: any) {
         console.error("Failed to load MediaPipe assets:", err);
       }
@@ -680,7 +688,10 @@ export default function Tab() {
         <View style={{ width: 0, height: 0, overflow: "hidden" }}>
           <WebView
             ref={webViewRef}
-            source={{ html: htmlContent }}
+            source={{ 
+              html: htmlContent,
+              baseUrl: htmlBaseUrl  // CRITICAL: This makes relative paths work!
+            }}
             style={{ width: 1, height: 1, opacity: 0.01 }}
             onMessage={onMessage}
             javaScriptEnabled={true}
