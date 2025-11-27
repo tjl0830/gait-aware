@@ -195,24 +195,36 @@ export default function Tab() {
         await asset.downloadAsync();
         if (!asset.localUri)
           throw new Error("HTML asset localUri not available");
-        
+
         // Store the base URL for WebView to resolve relative paths
         setHtmlBaseUrl(asset.localUri);
-        
+
         // Read the HTML file contents
         let content = await FileSystem.readAsStringAsync(asset.localUri);
-        
+
         // Load MediaPipe JS files and inline them into HTML
         console.log("[MediaPipe] Loading and inlining MediaPipe scripts...");
-        
+
         // Load .jslib files as assets (Metro bundles them since they're not .js)
-        const cameraAsset = Asset.fromModule(require("../../assets/mediapipe/camera_utils.jslib"));
-        const controlAsset = Asset.fromModule(require("../../assets/mediapipe/control_utils.jslib"));
-        const drawingAsset = Asset.fromModule(require("../../assets/mediapipe/drawing_utils.jslib"));
-        const poseAsset = Asset.fromModule(require("../../assets/mediapipe/pose.jslib"));
-        const packedAssetsLoaderAsset = Asset.fromModule(require("../../assets/mediapipe/pose_solution_packed_assets_loader.jslib"));
-        const wasmBinAsset = Asset.fromModule(require("../../assets/mediapipe/pose_solution_simd_wasm_bin.jslib"));
-        
+        const cameraAsset = Asset.fromModule(
+          require("../../assets/mediapipe/camera_utils.jslib")
+        );
+        const controlAsset = Asset.fromModule(
+          require("../../assets/mediapipe/control_utils.jslib")
+        );
+        const drawingAsset = Asset.fromModule(
+          require("../../assets/mediapipe/drawing_utils.jslib")
+        );
+        const poseAsset = Asset.fromModule(
+          require("../../assets/mediapipe/pose.jslib")
+        );
+        const packedAssetsLoaderAsset = Asset.fromModule(
+          require("../../assets/mediapipe/pose_solution_packed_assets_loader.jslib")
+        );
+        const wasmBinAsset = Asset.fromModule(
+          require("../../assets/mediapipe/pose_solution_simd_wasm_bin.jslib")
+        );
+
         await Promise.all([
           cameraAsset.downloadAsync(),
           controlAsset.downloadAsync(),
@@ -221,49 +233,97 @@ export default function Tab() {
           packedAssetsLoaderAsset.downloadAsync(),
           wasmBinAsset.downloadAsync(),
         ]);
-        
-        const cameraUtils = await FileSystem.readAsStringAsync(cameraAsset.localUri!);
-        const controlUtils = await FileSystem.readAsStringAsync(controlAsset.localUri!);
-        const drawingUtils = await FileSystem.readAsStringAsync(drawingAsset.localUri!);
+
+        const cameraUtils = await FileSystem.readAsStringAsync(
+          cameraAsset.localUri!
+        );
+        const controlUtils = await FileSystem.readAsStringAsync(
+          controlAsset.localUri!
+        );
+        const drawingUtils = await FileSystem.readAsStringAsync(
+          drawingAsset.localUri!
+        );
         const poseJs = await FileSystem.readAsStringAsync(poseAsset.localUri!);
-        const packedAssetsLoader = await FileSystem.readAsStringAsync(packedAssetsLoaderAsset.localUri!);
-        const wasmBin = await FileSystem.readAsStringAsync(wasmBinAsset.localUri!);
-        
+        const packedAssetsLoader = await FileSystem.readAsStringAsync(
+          packedAssetsLoaderAsset.localUri!
+        );
+        const wasmBin = await FileSystem.readAsStringAsync(
+          wasmBinAsset.localUri!
+        );
+
         // Also load binary files and convert to base64 data URLs
-        console.log("[MediaPipe] Loading binary files and converting to base64...");
-        const tfliteAsset = Asset.fromModule(require("../../assets/mediapipe/pose_landmark_full.tflite"));
-        const wasmFileAsset = Asset.fromModule(require("../../assets/mediapipe/pose_solution_simd_wasm_bin.wasm"));
-        const dataAsset = Asset.fromModule(require("../../assets/mediapipe/pose_solution_packed_assets.data"));
-        const binarypbAsset = Asset.fromModule(require("../../assets/mediapipe/pose_web.binarypb"));
-        
+        console.log(
+          "[MediaPipe] Loading binary files and converting to base64..."
+        );
+        const tfliteAsset = Asset.fromModule(
+          require("../../assets/mediapipe/pose_landmark_full.tflite")
+        );
+        const wasmFileAsset = Asset.fromModule(
+          require("../../assets/mediapipe/pose_solution_simd_wasm_bin.wasm")
+        );
+        const dataAsset = Asset.fromModule(
+          require("../../assets/mediapipe/pose_solution_packed_assets.data")
+        );
+        const binarypbAsset = Asset.fromModule(
+          require("../../assets/mediapipe/pose_web.binarypb")
+        );
+
         await Promise.all([
           tfliteAsset.downloadAsync(),
           wasmFileAsset.downloadAsync(),
           dataAsset.downloadAsync(),
           binarypbAsset.downloadAsync(),
         ]);
-        
+
         // Read binary files as base64 and create data URLs
-        const tfliteBase64 = await FileSystem.readAsStringAsync(tfliteAsset.localUri!, { encoding: 'base64' });
-        const wasmBase64 = await FileSystem.readAsStringAsync(wasmFileAsset.localUri!, { encoding: 'base64' });
-        const dataBase64 = await FileSystem.readAsStringAsync(dataAsset.localUri!, { encoding: 'base64' });
-        const binarypbBase64 = await FileSystem.readAsStringAsync(binarypbAsset.localUri!, { encoding: 'base64' });
-        
+        const tfliteBase64 = await FileSystem.readAsStringAsync(
+          tfliteAsset.localUri!,
+          { encoding: "base64" }
+        );
+        const wasmBase64 = await FileSystem.readAsStringAsync(
+          wasmFileAsset.localUri!,
+          { encoding: "base64" }
+        );
+        const dataBase64 = await FileSystem.readAsStringAsync(
+          dataAsset.localUri!,
+          { encoding: "base64" }
+        );
+        const binarypbBase64 = await FileSystem.readAsStringAsync(
+          binarypbAsset.localUri!,
+          { encoding: "base64" }
+        );
+
         console.log("[MediaPipe] Binary files converted to base64");
-        console.log("  - pose_landmark_full.tflite:", (tfliteBase64.length / 1024 / 1024).toFixed(2), "MB (base64)");
-        console.log("  - pose_solution_simd_wasm_bin.wasm:", (wasmBase64.length / 1024 / 1024).toFixed(2), "MB (base64)");
-        console.log("  - pose_solution_packed_assets.data:", (dataBase64.length / 1024 / 1024).toFixed(2), "MB (base64)");
-        console.log("  - pose_web.binarypb:", (binarypbBase64.length / 1024).toFixed(2), "KB (base64)");
-        
+        console.log(
+          "  - pose_landmark_full.tflite:",
+          (tfliteBase64.length / 1024 / 1024).toFixed(2),
+          "MB (base64)"
+        );
+        console.log(
+          "  - pose_solution_simd_wasm_bin.wasm:",
+          (wasmBase64.length / 1024 / 1024).toFixed(2),
+          "MB (base64)"
+        );
+        console.log(
+          "  - pose_solution_packed_assets.data:",
+          (dataBase64.length / 1024 / 1024).toFixed(2),
+          "MB (base64)"
+        );
+        console.log(
+          "  - pose_web.binarypb:",
+          (binarypbBase64.length / 1024).toFixed(2),
+          "KB (base64)"
+        );
+
         // Store base64 data in state to inject via injectedJavaScriptBeforeContentLoaded
         // This avoids embedding 20MB of base64 directly in the HTML string
         setMediaPipeData({
           tflite: tfliteBase64,
           wasm: wasmBase64,
           data: dataBase64,
-          binarypb: binarypbBase64
+          binarypb: binarypbBase64,
         });
-        
+
         // Replace placeholder with inline scripts (NO data URLs here - too large!)
         // File URIs first, then loaders, then pose.js
         // Inline full offline bootstrap FIRST so loader scripts see Module + URIs immediately
@@ -322,19 +382,45 @@ export default function Tab() {
     <script>${packedAssetsLoader}</script>
     <script>${wasmBin}</script>
     <script>${poseJs}</script>`;
-        
-        console.log("[MediaPipe] Placeholder found in HTML:", content.includes('<!-- MEDIAPIPE_SCRIPTS_PLACEHOLDER -->'));
-        content = content.replace('<!-- MEDIAPIPE_SCRIPTS_PLACEHOLDER -->', inlineScripts);
-        console.log("[MediaPipe] After replacement, placeholder still exists:", content.includes('<!-- MEDIAPIPE_SCRIPTS_PLACEHOLDER -->'));
-        console.log("[MediaPipe] After replacement, scripts exist:", content.includes('<script>${cameraUtils.substring(0, 50)}'));
-        
+
+        console.log(
+          "[MediaPipe] Placeholder found in HTML:",
+          content.includes("<!-- MEDIAPIPE_SCRIPTS_PLACEHOLDER -->")
+        );
+        content = content.replace(
+          "<!-- MEDIAPIPE_SCRIPTS_PLACEHOLDER -->",
+          inlineScripts
+        );
+        console.log(
+          "[MediaPipe] After replacement, placeholder still exists:",
+          content.includes("<!-- MEDIAPIPE_SCRIPTS_PLACEHOLDER -->")
+        );
+        console.log(
+          "[MediaPipe] After replacement, scripts exist:",
+          content.includes("<script>${cameraUtils.substring(0, 50)}")
+        );
+
         setHtmlContent(content);
-        
-        console.log("[MediaPipe] HTML loaded with inlined scripts from:", asset.localUri);
-        console.log("[MediaPipe] HTML content length:", content.length, "characters");
-        console.log("[MediaPipe] Inlined scripts total size:", 
-          cameraUtils.length + controlUtils.length + drawingUtils.length + poseJs.length + packedAssetsLoader.length + wasmBin.length,
-          "characters");
+
+        console.log(
+          "[MediaPipe] HTML loaded with inlined scripts from:",
+          asset.localUri
+        );
+        console.log(
+          "[MediaPipe] HTML content length:",
+          content.length,
+          "characters"
+        );
+        console.log(
+          "[MediaPipe] Inlined scripts total size:",
+          cameraUtils.length +
+            controlUtils.length +
+            drawingUtils.length +
+            poseJs.length +
+            packedAssetsLoader.length +
+            wasmBin.length,
+          "characters"
+        );
       } catch (err: any) {
         console.error("Failed to load MediaPipe assets:", err);
       }
@@ -826,9 +912,9 @@ export default function Tab() {
         <View style={{ width: 0, height: 0, overflow: "hidden" }}>
           <WebView
             ref={webViewRef}
-            source={{ 
+            source={{
               html: htmlContent,
-              baseUrl: htmlBaseUrl  // CRITICAL: This makes relative paths work!
+              baseUrl: htmlBaseUrl, // CRITICAL: This makes relative paths work!
             }}
             style={{ width: 1, height: 1, opacity: 0.01 }}
             onMessage={onMessage}
