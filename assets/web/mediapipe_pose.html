@@ -3,6 +3,15 @@
 <head>
     <meta charset="utf-8">
     <script>
+        // IMMEDIATE test log - before any other code
+        if (window.ReactNativeWebView) {
+            window.ReactNativeWebView.postMessage(JSON.stringify({
+                type: 'console',
+                level: 'log',
+                message: '🔥 [HTML] IMMEDIATE LOG - ReactNativeWebView exists!'
+            }));
+        }
+        
         // Forward console logs to React Native FIRST (before any other scripts)
         (function() {
             const originalLog = console.log;
@@ -10,31 +19,46 @@
             const originalWarn = console.warn;
             
             console.log = function(...args) {
-                window.ReactNativeWebView?.postMessage(JSON.stringify({
-                    type: 'console',
-                    level: 'log',
-                    message: args.join(' ')
-                }));
+                try {
+                    window.ReactNativeWebView?.postMessage(JSON.stringify({
+                        type: 'console',
+                        level: 'log',
+                        message: args.join(' ')
+                    }));
+                } catch (e) {
+                    // Silently fail if postMessage doesn't work
+                }
                 originalLog.apply(console, args);
             };
             
             console.error = function(...args) {
-                window.ReactNativeWebView?.postMessage(JSON.stringify({
-                    type: 'console',
-                    level: 'error',
-                    message: args.join(' ')
-                }));
+                try {
+                    window.ReactNativeWebView?.postMessage(JSON.stringify({
+                        type: 'console',
+                        level: 'error',
+                        message: args.join(' ')
+                    }));
+                } catch (e) {
+                    // Silently fail
+                }
                 originalError.apply(console, args);
             };
             
             console.warn = function(...args) {
-                window.ReactNativeWebView?.postMessage(JSON.stringify({
-                    type: 'console',
-                    level: 'warn',
-                    message: args.join(' ')
-                }));
+                try {
+                    window.ReactNativeWebView?.postMessage(JSON.stringify({
+                        type: 'console',
+                        level: 'warn',
+                        message: args.join(' ')
+                    }));
+                } catch (e) {
+                    // Silently fail
+                }
                 originalWarn.apply(console, args);
             };
+            
+            // Test the console forwarding immediately
+            console.log('🔥 [HTML] Console forwarding installed and tested!');
         })();
     </script>
     <script>
@@ -48,9 +72,53 @@
             window.fetch = function(...args) {
                 const url = args[0];
                 
-                // Only track MediaPipe files
-                if (typeof url === 'string' && url.includes('mediapipe/pose')) {
-                    const fileName = url.split('/').pop();
+                // Log ALL fetch calls to see what's being requested
+                console.log(`🔍 [Fetch] Called with URL:`, typeof url === 'string' ? url.substring(0, 100) : url);
+                
+                // Intercept requests for inlined files
+                if (url === 'INLINED' || 
+                    (typeof url === 'string' && (
+                        url.includes('pose_solution_packed_assets_loader.js') || 
+                        url.includes('pose_solution_simd_wasm_bin.js')
+                    ))) {
+                    const fileName = url === 'INLINED' ? 'inlined script' : url.split('/').pop();
+                    console.log(`⚠️ [MediaPipe] Blocked redundant request for ${fileName} (already inlined as script tag)`);
+                    // Return empty success response since these are already loaded
+                    return Promise.resolve(new Response('', {
+                        status: 200,
+                        statusText: 'OK',
+                        headers: { 'Content-Type': 'application/javascript' }
+                    }));
+                }
+                
+                // Track all MediaPipe-related files (data URLs, relative paths, and file:// URIs)
+                if (typeof url === 'string' && (
+                    url.startsWith('data:') ||
+                    url.includes('mediapipe/pose') || 
+                    url.startsWith('file://') ||
+                    url.includes('.tflite') ||
+                    url.includes('.wasm') ||
+                    url.includes('.data') ||
+                    url.includes('.binarypb')
+                )) {
+                    // Extract filename from URL or data URL
+                    let fileName;
+                    if (url.startsWith('data:')) {
+                        // For data URLs, we can't extract filename from URL
+                        // Check window.MEDIAPIPE_FILE_URIS to find which file this is
+                        fileName = 'data-url-file';
+                        if (window.MEDIAPIPE_FILE_URIS) {
+                            for (const [name, uri] of Object.entries(window.MEDIAPIPE_FILE_URIS)) {
+                                if (uri === url) {
+                                    fileName = name;
+                                    break;
+                                }
+                            }
+                        }
+                    } else {
+                        fileName = url.split('/').pop();
+                    }
+                    
                     totalFiles++;
                     
                     console.log(`📥 [MediaPipe] Downloading: ${fileName}`);
@@ -62,27 +130,32 @@
                         total: totalFiles
                     }));
                     
-                    return originalFetch.apply(this, args).then(response => {
-                        if (!response.ok) {
-                            throw new Error(`Failed to load ${fileName}: ${response.status}`);
-                        }
-                        
-                        const contentLength = response.headers.get('content-length');
-                        const total = contentLength ? parseInt(contentLength, 10) : 0;
-                        
-                        if (!contentLength || total === 0) {
-                            // No content-length header, just track completion
-                            loadedFiles++;
-                            console.log(`✅ [MediaPipe] Downloaded: ${fileName} (${loadedFiles}/${totalFiles})`);
-                            window.ReactNativeWebView?.postMessage(JSON.stringify({
-                                type: 'download_progress',
-                                fileName: fileName,
-                                status: 'complete',
-                                loaded: loadedFiles,
-                                total: totalFiles
-                            }));
-                            return response;
-                        }
+                    return originalFetch.apply(this, args)
+                        .then(response => {
+                            console.log(`📦 [MediaPipe] Fetch response for ${fileName}: status=${response.status}, ok=${response.ok}`);
+                            
+                            if (!response.ok) {
+                                console.error(`❌ [MediaPipe] Failed to load ${fileName}: HTTP ${response.status} ${response.statusText}`);
+                                throw new Error(`Failed to load ${fileName}: ${response.status}`);
+                            }
+                            
+                            const contentLength = response.headers.get('content-length');
+                            const total = contentLength ? parseInt(contentLength, 10) : 0;
+                            console.log(`📦 [MediaPipe] ${fileName} content-length: ${total || 'unknown'} bytes`);
+                            
+                            if (!contentLength || total === 0) {
+                                // No content-length header, just track completion
+                                loadedFiles++;
+                                console.log(`✅ [MediaPipe] Downloaded: ${fileName} (${loadedFiles}/${totalFiles})`);
+                                window.ReactNativeWebView?.postMessage(JSON.stringify({
+                                    type: 'download_progress',
+                                    fileName: fileName,
+                                    status: 'complete',
+                                    loaded: loadedFiles,
+                                    total: totalFiles
+                                }));
+                                return response;
+                            }
                         
                         // Stream the response to track bytes
                         const reader = response.body.getReader();
@@ -140,6 +213,15 @@
                         return new Response(stream, {
                             headers: response.headers
                         });
+                    })
+                    .catch(error => {
+                        console.error(`❌ [MediaPipe] Fetch error for ${fileName}:`, error.name, error.message);
+                        console.error(`❌ [MediaPipe] Fetch URL was:`, url);
+                        window.ReactNativeWebView?.postMessage(JSON.stringify({
+                            type: 'error',
+                            message: `Failed to fetch ${fileName}: ${error.message}`
+                        }));
+                        throw error;
                     });
                 }
                 
@@ -149,11 +231,8 @@
             console.log('📡 [MediaPipe] Fetch interceptor installed for download tracking');
         })();
     </script>
-    <!-- MediaPipe libraries loaded from local assets for offline support -->
-    <script src="../mediapipe/camera_utils.js"></script>
-    <script src="../mediapipe/control_utils.js"></script>
-    <script src="../mediapipe/drawing_utils.js"></script>
-    <script src="../mediapipe/pose.js"></script>
+    <!-- MediaPipe libraries - PLACEHOLDER - Will be replaced by React Native -->
+    <!-- MEDIAPIPE_SCRIPTS_PLACEHOLDER -->
     <style>
         .container { 
             position: relative;
@@ -184,19 +263,38 @@
         <canvas id="output_canvas" width="1280px" height="720px"></canvas>
     </div>
     <script>
-        console.log('🎬 [MediaPipe] Script started - Creating Pose instance...');
-        
-        // MediaPipe Pose instance
-        const pose = new Pose({
-            locateFile: (file) => {
-                // Load from local assets instead of CDN for offline support
-                const url = `../mediapipe/${file}`;
-                console.log(`📦 [MediaPipe] locateFile requested: ${file} -> ${url} (offline)`);
-                return url;
+        // Wrap entire script in try-catch to catch initialization errors
+        try {
+            console.log('🎬 [MediaPipe] Script started - Checking if Pose is defined...');
+            
+            if (typeof Pose === 'undefined') {
+                throw new Error('Pose class is not defined! MediaPipe libraries may not have loaded correctly.');
             }
-        });
+            
+            console.log('✅ [MediaPipe] Pose class is available');
+            console.log('🎬 [MediaPipe] Creating Pose instance...');
+            
+            // MediaPipe Pose instance
+            const pose = new Pose({
+                locateFile: (file) => {
+                    console.log(`🔎 [MediaPipe] locateFile called for: "${file}"`);
+                    console.log(`🔎 [MediaPipe] Available keys in MEDIAPIPE_FILE_URIS:`, window.MEDIAPIPE_FILE_URIS ? Object.keys(window.MEDIAPIPE_FILE_URIS) : 'undefined');
+                    
+                    // Use injected file URIs if available (for offline binary files)
+                    if (window.MEDIAPIPE_FILE_URIS && window.MEDIAPIPE_FILE_URIS[file]) {
+                        const uri = window.MEDIAPIPE_FILE_URIS[file];
+                        console.log(`📦 [MediaPipe] locateFile requested: ${file} -> ${uri.substring(0, 80)}... (from injected URI)`);
+                        return uri;
+                    }
+                    
+                    // Fallback to relative path (shouldn't be needed if all files are injected)
+                    const url = `../mediapipe/${file}`;
+                    console.log(`⚠️ [MediaPipe] locateFile requested: ${file} -> ${url} (FALLBACK - FILE NOT IN URIS!)`);
+                    return url;
+                }
+            });
 
-        console.log('✅ [MediaPipe] Pose instance created successfully');
+            console.log('✅ [MediaPipe] Pose instance created successfully');
 
         // Configure pose detection
         const poseOptions = {
@@ -209,6 +307,7 @@
         console.log('⚙️ [MediaPipe] Setting options:', poseOptions);
         pose.setOptions(poseOptions);
         console.log('✅ [MediaPipe] Options set successfully');
+        console.log('⏳ [MediaPipe] Initializing pose detection (loading models)...');
         
         // Model complexity lookup
         const MODEL_NAMES = { 0: 'Lite', 1: 'Full', 2: 'Heavy' };
@@ -396,6 +495,18 @@
             type: 'status',
             message: `MediaPipe Pose initialized (Model: ${MODEL_NAMES[poseOptions.modelComplexity] || 'Unknown'} [${poseOptions.modelComplexity}])`
         }));
+        
+    } catch (error) {
+        console.error('💥 [MediaPipe] FATAL ERROR during initialization:', error);
+        console.error('Error name:', error.name);
+        console.error('Error message:', error.message);
+        console.error('Error stack:', error.stack);
+        
+        window.ReactNativeWebView?.postMessage?.(JSON.stringify({
+            type: 'error',
+            message: `MediaPipe initialization failed: ${error.message}`
+        }));
+    }
     </script>
 </body>
 </html>

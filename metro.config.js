@@ -6,7 +6,7 @@ const config = getDefaultConfig(__dirname);
 config.resolver.assetExts.push('bin');
 
 // Add MediaPipe file extensions for offline support
-// Note: Adding 'js' here might cause Metro to bundle them as-is instead of transpiling
-config.resolver.assetExts.push('wasm', 'tflite', 'data');
+// .jslib = JavaScript library files (renamed from .js to avoid Metro transpilation)
+config.resolver.assetExts.push('wasm', 'tflite', 'data', 'jslib', 'binarypb');
 
 module.exports = config;

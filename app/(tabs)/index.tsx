@@ -107,6 +107,12 @@ export default function Tab() {
   // Hold the MediaPipe HTML file (read as string) for WebView
   const [htmlContent, setHtmlContent] = useState<string>("");
   const [htmlBaseUrl, setHtmlBaseUrl] = useState<string>(""); // Store base URL for relative paths
+  const [mediaPipeData, setMediaPipeData] = useState<{
+    tflite: string;
+    wasm: string;
+    data: string;
+    binarypb: string;
+  } | null>(null);
   const [cnnResult, setCnnResult] = useState<{
     predictedClass: string;
     confidence: number;
@@ -193,11 +199,142 @@ export default function Tab() {
         // Store the base URL for WebView to resolve relative paths
         setHtmlBaseUrl(asset.localUri);
         
-        // Read the HTML file contents and feed it directly to WebView
-        const content = await FileSystem.readAsStringAsync(asset.localUri);
+        // Read the HTML file contents
+        let content = await FileSystem.readAsStringAsync(asset.localUri);
+        
+        // Load MediaPipe JS files and inline them into HTML
+        console.log("[MediaPipe] Loading and inlining MediaPipe scripts...");
+        
+        // Load .jslib files as assets (Metro bundles them since they're not .js)
+        const cameraAsset = Asset.fromModule(require("../../assets/mediapipe/camera_utils.jslib"));
+        const controlAsset = Asset.fromModule(require("../../assets/mediapipe/control_utils.jslib"));
+        const drawingAsset = Asset.fromModule(require("../../assets/mediapipe/drawing_utils.jslib"));
+        const poseAsset = Asset.fromModule(require("../../assets/mediapipe/pose.jslib"));
+        const packedAssetsLoaderAsset = Asset.fromModule(require("../../assets/mediapipe/pose_solution_packed_assets_loader.jslib"));
+        const wasmBinAsset = Asset.fromModule(require("../../assets/mediapipe/pose_solution_simd_wasm_bin.jslib"));
+        
+        await Promise.all([
+          cameraAsset.downloadAsync(),
+          controlAsset.downloadAsync(),
+          drawingAsset.downloadAsync(),
+          poseAsset.downloadAsync(),
+          packedAssetsLoaderAsset.downloadAsync(),
+          wasmBinAsset.downloadAsync(),
+        ]);
+        
+        const cameraUtils = await FileSystem.readAsStringAsync(cameraAsset.localUri!);
+        const controlUtils = await FileSystem.readAsStringAsync(controlAsset.localUri!);
+        const drawingUtils = await FileSystem.readAsStringAsync(drawingAsset.localUri!);
+        const poseJs = await FileSystem.readAsStringAsync(poseAsset.localUri!);
+        const packedAssetsLoader = await FileSystem.readAsStringAsync(packedAssetsLoaderAsset.localUri!);
+        const wasmBin = await FileSystem.readAsStringAsync(wasmBinAsset.localUri!);
+        
+        // Also load binary files and convert to base64 data URLs
+        console.log("[MediaPipe] Loading binary files and converting to base64...");
+        const tfliteAsset = Asset.fromModule(require("../../assets/mediapipe/pose_landmark_full.tflite"));
+        const wasmFileAsset = Asset.fromModule(require("../../assets/mediapipe/pose_solution_simd_wasm_bin.wasm"));
+        const dataAsset = Asset.fromModule(require("../../assets/mediapipe/pose_solution_packed_assets.data"));
+        const binarypbAsset = Asset.fromModule(require("../../assets/mediapipe/pose_web.binarypb"));
+        
+        await Promise.all([
+          tfliteAsset.downloadAsync(),
+          wasmFileAsset.downloadAsync(),
+          dataAsset.downloadAsync(),
+          binarypbAsset.downloadAsync(),
+        ]);
+        
+        // Read binary files as base64 and create data URLs
+        const tfliteBase64 = await FileSystem.readAsStringAsync(tfliteAsset.localUri!, { encoding: 'base64' });
+        const wasmBase64 = await FileSystem.readAsStringAsync(wasmFileAsset.localUri!, { encoding: 'base64' });
+        const dataBase64 = await FileSystem.readAsStringAsync(dataAsset.localUri!, { encoding: 'base64' });
+        const binarypbBase64 = await FileSystem.readAsStringAsync(binarypbAsset.localUri!, { encoding: 'base64' });
+        
+        console.log("[MediaPipe] Binary files converted to base64");
+        console.log("  - pose_landmark_full.tflite:", (tfliteBase64.length / 1024 / 1024).toFixed(2), "MB (base64)");
+        console.log("  - pose_solution_simd_wasm_bin.wasm:", (wasmBase64.length / 1024 / 1024).toFixed(2), "MB (base64)");
+        console.log("  - pose_solution_packed_assets.data:", (dataBase64.length / 1024 / 1024).toFixed(2), "MB (base64)");
+        console.log("  - pose_web.binarypb:", (binarypbBase64.length / 1024).toFixed(2), "KB (base64)");
+        
+        // Store base64 data in state to inject via injectedJavaScriptBeforeContentLoaded
+        // This avoids embedding 20MB of base64 directly in the HTML string
+        setMediaPipeData({
+          tflite: tfliteBase64,
+          wasm: wasmBase64,
+          data: dataBase64,
+          binarypb: binarypbBase64
+        });
+        
+        // Replace placeholder with inline scripts (NO data URLs here - too large!)
+        // File URIs first, then loaders, then pose.js
+        // Inline full offline bootstrap FIRST so loader scripts see Module + URIs immediately
+        const inlineScripts = `
+    <script>
+    (function(){
+      try {
+        const BASE64 = {
+          tflite: '${tfliteBase64}',
+          wasm: '${wasmBase64}',
+          data: '${dataBase64}',
+          binarypb: '${binarypbBase64}'
+        };
+        // Expose data URIs
+        window.MEDIAPIPE_FILE_URIS = {
+          'pose_landmark_full.tflite': 'data:application/octet-stream;base64,' + BASE64.tflite,
+          'pose_solution_simd_wasm_bin.wasm': 'data:application/wasm;base64,' + BASE64.wasm,
+          'pose_solution_packed_assets.data': 'data:application/octet-stream;base64,' + BASE64.data,
+          'pose_web.binarypb': 'data:application/octet-stream;base64,' + BASE64.binarypb,
+          'pose_solution_packed_assets_loader.js': 'INLINED',
+          'pose_solution_simd_wasm_bin.js': 'INLINED'
+        };
+        // Prepare Module before loader scripts run
+        window.Module = window.Module || {};
+        const b64ToBytes = (b64) => {
+          const decoded = atob(b64); const len = decoded.length; const out = new Uint8Array(len); for (let i=0;i<len;i++) out[i]=decoded.charCodeAt(i); return out;
+        };
+        if (!window.Module.wasmBinary) {
+          window.Module.wasmBinary = b64ToBytes(BASE64.wasm);
+          console.log('🧩 [MediaPipe] (early) wasmBinary injected size=' + window.Module.wasmBinary.length);
+        }
+        window.Module.__packedDataBase64 = BASE64.data;
+        window.Module.preRun = window.Module.preRun || [];
+        window.Module.preRun.push(function(){
+          try {
+            const dataBytes = b64ToBytes(window.Module.__packedDataBase64);
+            const path = 'pose_solution_packed_assets.data';
+            if (typeof FS !== 'undefined' && !FS.analyzePath(path).exists) {
+              FS.createDataFile('/', path, dataBytes, true, false);
+              console.log('📦 [MediaPipe] (early) packed assets mounted size=' + dataBytes.length);
+            }
+          } catch(e){ console.log('⚠️ [MediaPipe] mount packed assets failed:', e.message); }
+        });
+        const originalLocate = window.Module.locateFile;
+        window.Module.locateFile = function(path, prefix){
+          if (window.MEDIAPIPE_FILE_URIS[path]) { console.log('🔎 [MediaPipe] Module.locateFile early '+path+' -> injected'); return window.MEDIAPIPE_FILE_URIS[path]; }
+          const out = originalLocate ? originalLocate(path,prefix) : (prefix||'') + path; console.log('🔎 [MediaPipe] Module.locateFile early '+path+' fallback -> '+out); return out;
+        };
+        console.log('📁 [MediaPipe] Offline bootstrap (inline) ready before solution scripts');
+      } catch(e){ console.log('💥 [MediaPipe] Offline bootstrap inline error:', e.message); }
+    })();
+    </script>
+    <script>${cameraUtils}</script>
+    <script>${controlUtils}</script>
+    <script>${drawingUtils}</script>
+    <script>${packedAssetsLoader}</script>
+    <script>${wasmBin}</script>
+    <script>${poseJs}</script>`;
+        
+        console.log("[MediaPipe] Placeholder found in HTML:", content.includes('<!-- MEDIAPIPE_SCRIPTS_PLACEHOLDER -->'));
+        content = content.replace('<!-- MEDIAPIPE_SCRIPTS_PLACEHOLDER -->', inlineScripts);
+        console.log("[MediaPipe] After replacement, placeholder still exists:", content.includes('<!-- MEDIAPIPE_SCRIPTS_PLACEHOLDER -->'));
+        console.log("[MediaPipe] After replacement, scripts exist:", content.includes('<script>${cameraUtils.substring(0, 50)}'));
+        
         setHtmlContent(content);
         
-        console.log("[MediaPipe] HTML loaded from:", asset.localUri);
+        console.log("[MediaPipe] HTML loaded with inlined scripts from:", asset.localUri);
+        console.log("[MediaPipe] HTML content length:", content.length, "characters");
+        console.log("[MediaPipe] Inlined scripts total size:", 
+          cameraUtils.length + controlUtils.length + drawingUtils.length + poseJs.length + packedAssetsLoader.length + wasmBin.length,
+          "characters");
       } catch (err: any) {
         console.error("Failed to load MediaPipe assets:", err);
       }
@@ -275,6 +412,7 @@ export default function Tab() {
             : message.level === "warn"
             ? "⚠️"
             : "📝";
+        console.log(`${prefix} [WebView] ${message.message}`);
         return;
       }
 
@@ -695,6 +833,8 @@ export default function Tab() {
             style={{ width: 1, height: 1, opacity: 0.01 }}
             onMessage={onMessage}
             javaScriptEnabled={true}
+            // Removed injectedJavaScriptBeforeContentLoaded (bootstrap now inline & synchronous)
+            injectedJavaScriptBeforeContentLoaded={undefined}
             allowsInlineMediaPlayback={true}
             mediaPlaybackRequiresUserAction={false}
             originWhitelist={["*"]}
@@ -703,6 +843,13 @@ export default function Tab() {
             cacheEnabled={false}
             incognito={true}
             sharedCookiesEnabled={false}
+            onLoadStart={() => {
+              console.log("[WebView] 🚀 Load started");
+            }}
+            onLoadEnd={(syntheticEvent) => {
+              console.log("[WebView] ✅ Load completed");
+              console.log("[WebView] URL:", syntheticEvent.nativeEvent.url);
+            }}
             onError={(syntheticEvent) => {
               const { nativeEvent } = syntheticEvent;
               console.error("[WebView] Error:", nativeEvent);
