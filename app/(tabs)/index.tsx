@@ -1126,6 +1126,9 @@ export default function Tab() {
               source={{ uri: sampleVideoUri }}
               useNativeControls
               resizeMode={ResizeMode.CONTAIN}
+              shouldPlay
+              isMuted
+              isLooping
               style={{ width: "100%", height: 360, backgroundColor: "#000" }}
             />
           ) : (
