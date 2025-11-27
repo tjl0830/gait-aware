@@ -80,7 +80,7 @@ export default function Tab() {
   useEffect(() => {
     (async () => {
       try {
-        const moduleId = require("../../assets/test_videos/Rebb_normal.mp4");
+        const moduleId = require("../../assets/videos/sample_video.mp4");
         const asset = Asset.fromModule(moduleId);
         await asset.downloadAsync();
         setSampleVideoUri(asset.localUri ?? asset.uri);
@@ -1114,7 +1114,7 @@ export default function Tab() {
         </View>
       </Modal>
 
-      {/* Sample Video Modal (plays bundled assets/test_videos/Rebb_normal.mp4) */}
+      {/* Sample Video Modal (plays bundled assets/videos/sample_video.mp4) */}
       <Modal
         visible={sampleVisible}
         animationType="slide"

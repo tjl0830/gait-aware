@@ -65,7 +65,7 @@ function UserInfo({ initialData, onChange }: UserInfoProps = {}) {
               setFormData(newData);
               onChange?.(newData);
             }}
-            placeholder="e.g., Male / Female / Other"
+            placeholder="Male"
             placeholderTextColor="#999"
           />
         </View>
@@ -166,6 +166,7 @@ const styles = StyleSheet.create({
     fontSize: 16,
     width: "100%",
     backgroundColor: "#fff",
+    textAlignVertical: "center", // Ensures placeholder and text are vertically centered
   },
   textArea: {
     height: 100,
