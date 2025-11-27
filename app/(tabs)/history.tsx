@@ -49,6 +49,52 @@ type HistoryItem = {
 };
 
 export default function Tab() {
+    // Share PDF for a specific history item
+    async function sharePdfForItem(item: HistoryItem) {
+      try {
+        // If PDF already saved, use its path
+        if (item.pdfPath) {
+          const SharingMod = await import("expo-sharing").catch(() => null);
+          const Sharing = SharingMod ? SharingMod.default ?? SharingMod : null;
+          if (
+            Sharing &&
+            (await (Sharing.isAvailableAsync?.() ?? Promise.resolve(true)))
+          ) {
+            await Sharing.shareAsync(item.pdfPath, { mimeType: "application/pdf" });
+            return;
+          }
+        }
+        // Otherwise, generate PDF and share
+        setSavingPdf(true);
+        const pdfBytes = await createPdfBytes(item);
+        const FileSystem: any = await loadFileSystem();
+        if (!FileSystem) {
+          Alert.alert("Missing module", "expo-file-system is required to share files locally. Install and rebuild.");
+          setSavingPdf(false);
+          return;
+        }
+        const filename = sanitizeFilename(item.name ?? `GaitAware-${Date.now()}`) + ".pdf";
+        const encoding = FileSystem.EncodingType && FileSystem.EncodingType.Base64 ? FileSystem.EncodingType.Base64 : "base64";
+        const baseDir = FileSystem.documentDirectory ?? FileSystem.cacheDirectory ?? "";
+        const path = `${baseDir}${filename}`;
+        await FileSystem.writeAsStringAsync(path, pdfBytes, { encoding });
+        const SharingMod = await import("expo-sharing").catch(() => null);
+        const Sharing = SharingMod ? SharingMod.default ?? SharingMod : null;
+        if (
+          Sharing &&
+          (await (Sharing.isAvailableAsync?.() ?? Promise.resolve(true)))
+        ) {
+          await Sharing.shareAsync(path, { mimeType: "application/pdf" });
+        } else {
+          Alert.alert("Share failed", "Sharing is not available on this device.");
+        }
+        setSavingPdf(false);
+      } catch (e) {
+        setSavingPdf(false);
+        Alert.alert("Share failed", "Could not share PDF. See console for details.");
+        console.warn("sharePdfForItem failed", e);
+      }
+    }
   const [items, setItems] = useState<HistoryItem[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -1087,6 +1133,19 @@ export default function Tab() {
             )}
           </TouchableOpacity>
 
+            {/* Share Button below View PDF */}
+            <TouchableOpacity
+              style={styles.pdfBtn}
+              onPress={() => sharePdfForItem(item)}
+              disabled={savingPdf}
+            >
+              {savingPdf ? (
+                <ActivityIndicator color="#fff" size="small" />
+              ) : (
+                <Text style={styles.pdfBtnText}>Share PDF</Text>
+              )}
+            </TouchableOpacity>
+
           <TouchableOpacity
             style={styles.deleteBtn}
             onPress={() => deleteHistory(item.id)}
@@ -1197,7 +1256,7 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     borderRadius: 8,
     marginBottom: 8,
-    minWidth: 90,
+    width: 120,
     alignItems: "center",
   },
   pdfBtnText: { color: "#fff", fontWeight: "600", fontSize: 14 },
